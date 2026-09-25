@@ -54,6 +54,12 @@ main() {
     exit 1
   fi
 
+  # Existing installations must use the binary-only transaction, not regeneration.
+  if [[ -e "$(xray::active)" || -L "$(xray::active)" ]]; then
+    core::log error "existing configuration found; use xrf upgrade --version <version> to preserve credentials and settings" '{}'
+    return 1
+  fi
+
   # Export arguments as environment variables
   args::export_vars
 

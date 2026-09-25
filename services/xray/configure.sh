@@ -212,7 +212,8 @@ xray::prepare_release_dir() {
 xray::write_base_configs() {
   local release_dir="${1}"
   local dns_query_strategy="${2:-UseIPv4}"
-  local log_level="${XRAY_LOG_LEVEL:-warning}"
+  local log_config log_file
+  log_file="$(xray::active)/${XRAY_CONFIG_00_LOG}"
 
   case "${dns_query_strategy}" in
     UseIP | UseIPv4 | UseIPv6) ;;
@@ -222,9 +223,19 @@ xray::write_base_configs() {
       ;;
   esac
 
-  # Logging configuration
-  printf '{"log":{"access":"none","error":"","loglevel":"%s"}}' "${log_level}" \
-    | io::atomic_write "${release_dir}/${XRAY_CONFIG_00_LOG}" 0640
+  # Preserve the active log object, including DNS logging and masking options.
+  log_config='{"log":{"access":"none","error":"","loglevel":"warning"}}'
+  if [[ -f "${log_file}" ]]; then
+    log_config="$(jq -e '{log: .log} | select(.log | type == "object")' "${log_file}")" || return 1
+  fi
+  log_config="$(jq --arg level "${XRAY_LOG_LEVEL-}" \
+    --arg access "${XRAY_ACCESS_LOG-}" --arg error "${XRAY_ERROR_LOG-}" \
+    --arg set_access "${XRAY_ACCESS_LOG+x}" --arg set_error "${XRAY_ERROR_LOG+x}" '
+      if $level != "" then .log.loglevel = $level else . end |
+      if $set_access == "x" then .log.access = $access else . end |
+      if $set_error == "x" then .log.error = $error else . end
+    ' <<< "${log_config}")" || return 1
+  printf '%s\n' "${log_config}" | io::atomic_write "${release_dir}/${XRAY_CONFIG_00_LOG}" 0640 || return 1
 
   # Outbounds configuration
   printf '{"outbounds":[{"protocol":"freedom","tag":"direct"},{"protocol":"blackhole","tag":"block"}]}' \
@@ -477,7 +488,6 @@ render_release() {
   core::log debug "release directory created" "$(printf '{"dir":"%s"}' "${release_dir}")"
 
   # Step 2: Initialize plugin system and emit pre-configure hooks
-  : "${XRAY_LOG_LEVEL:=warning}"
   : "${XRAY_SNIFFING:=false}"
   plugins::ensure_dirs
   plugins::load_enabled
@@ -546,20 +556,49 @@ deploy_release() {
       return 1
     fi
   fi
-  local new_digest
-  new_digest="$(digest_confdir "${release_dir}")"
-  local old_digest=""
+  local new_digest old_digest="" binary_digest="" old_binary_digest="" old_active=""
+  local binary_stamp was_active=false
+  binary_stamp="$(state::dir)/binary.sha256"
+  new_digest="$(digest_confdir "${release_dir}")" || return 1
   [[ -f "$(state::digest)" ]] && old_digest="$(cat "$(state::digest)")"
-  if [[ -n "${old_digest}" && "${old_digest}" == "${new_digest}" ]]; then
-    core::log info "no changes; skip reload" "$(printf '{"digest":"%s"}' "${new_digest}")"
+  [[ -L "$(xray::active)" ]] && old_active="$(readlink -f "$(xray::active)")"
+  if [[ -x "$(xray::bin)" ]]; then
+    binary_digest="$(sha256sum "$(xray::bin)" | awk '{print $1}')" || return 1
+  fi
+  [[ -f "${binary_stamp}" ]] && old_binary_digest="$(cat "${binary_stamp}")"
+  if command -v systemctl > /dev/null 2>&1 && systemctl is-active --quiet xray; then
+    was_active=true
+  fi
+  if [[ -n "${old_active}" && "${old_digest}" == "${new_digest}" &&
+    "$(digest_confdir "$(xray::active)")" == "${new_digest}" &&
+    -n "${binary_digest}" && "${old_binary_digest}" == "${binary_digest}" ]]; then
+    core::log info "configuration and deployed binary unchanged" '{}'
     return 0
   fi
-  io::ensure_dir "$(xray::confbase)" 0755
-  io::ensure_dir "$(xray::releases)" 0755
-  ln -sfn "${release_dir}" "$(xray::active).new"
-  mv -Tf "$(xray::active).new" "$(xray::active)"
-  echo "${new_digest}" | io::atomic_write "$(state::digest)" 0644
-  if command -v systemctl > /dev/null 2>&1 && systemctl is-active --quiet xray 2> /dev/null; then systemctl reload-or-restart xray || systemctl restart xray || true; fi
+  io::ensure_dir "$(xray::confbase)" 0755 || return 1
+  io::ensure_dir "$(xray::releases)" 0755 || return 1
+  ln -sfn "${release_dir}" "$(xray::active).new" || return 1
+  mv -Tf "$(xray::active).new" "$(xray::active)" || return 1
+  if [[ "${was_active}" == true ]]; then
+    if ! systemctl restart xray || ! systemctl is-active --quiet xray; then
+      core::log error "restart failed; restoring previous active configuration" '{}'
+      if [[ -n "${old_active}" ]]; then
+        ln -sfn "${old_active}" "$(xray::active).new" || return 1
+        mv -Tf "$(xray::active).new" "$(xray::active)" || return 1
+        systemctl restart xray && systemctl is-active --quiet xray || {
+          core::log error "service rollback failed; manual recovery required" '{}'
+          return 1
+        }
+      else
+        rm -f "$(xray::active)"
+      fi
+      return 1
+    fi
+  fi
+  printf '%s\n' "${new_digest}" | io::atomic_write "$(state::digest)" 0644 || return 1
+  if [[ "${was_active}" == true ]]; then
+    printf '%s\n' "${binary_digest}" | io::atomic_write "${binary_stamp}" 0644 || return 1
+  fi
   plugins::emit deploy_post "active_dir=$(xray::active)"
   core::log info "deployed" "$(printf '{"active":"%s"}' "$(xray::active)")"
 }
@@ -595,4 +634,6 @@ main() {
   plugins::load_enabled
   core::with_flock "$(state::lock)" deploy_with_lock "${topology}"
 }
-main "${@}"
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "${@}"
+fi

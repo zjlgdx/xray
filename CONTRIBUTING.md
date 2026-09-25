@@ -581,3 +581,12 @@ By contributing to xray-fusion, you agree that your contributions will be licens
 ---
 
 Thank you for contributing to xray-fusion! 🎉
+
+### Upgrade and deployment changes
+
+Exercise `tests/unit/test_upgrade.bats` and `tests/unit/test_deploy_transaction.bats`
+when changing installation or deployment. Cover candidate validation, restart and
+metadata-write failures, old-binary restoration, active-symlink restoration, preserved
+credentials/log settings and a binary change with an unchanged configuration. Tests
+must call production functions rather than duplicate their implementations. Keep an
+explicit distinction between mocked lifecycle tests and actual client compatibility.

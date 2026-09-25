@@ -187,7 +187,7 @@ run_install_command() {
   fi
 
   if [[ "${SMOKE_MODE}" == "online" ]]; then
-    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}'; curl -fsSL '${ONLINE_INSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1"
+    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}'; curl -fsSL '${ONLINE_INSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1" || return $?
     return 0
   fi
 
@@ -205,7 +205,7 @@ run_uninstall_command() {
   fi
 
   if [[ "${SMOKE_MODE}" == "online" ]]; then
-    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}'; curl -fsSL '${ONLINE_UNINSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1"
+    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}'; curl -fsSL '${ONLINE_UNINSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1" || return $?
     return 0
   fi
 
@@ -301,10 +301,14 @@ run_in_container "test -x /usr/local/bin/xray"
 run_in_container "test -L /usr/local/etc/xray/active"
 run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.json > /dev/null"
 
-log "scenario 2: in-place reinstall creates backup"
-CURRENT_SCENARIO="scenario 2 in-place reinstall"
-run_install_command /tmp/scenario2.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes
-run_in_container "ls /var/lib/xray-fusion/backups/*.metadata.json > /dev/null"
+log "scenario 2: reinstall refuses to replace existing credentials"
+CURRENT_SCENARIO="scenario 2 reinstall guard"
+run_in_container "sha256sum /usr/local/etc/xray/active/*.json /var/lib/xray-fusion/state.json > /tmp/before-reinstall.sha256"
+if run_install_command /tmp/scenario2.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes; then
+  log "reinstall unexpectedly succeeded"
+  exit 1
+fi
+run_in_container "grep -q 'use xrf upgrade' /tmp/scenario2.log && sha256sum -c /tmp/before-reinstall.sha256"
 
 if [[ "${SMOKE_MODE}" == "online" ]]; then
   log "scenario 3: online uninstall removes installed artifacts"
@@ -324,7 +328,8 @@ else
   run_install_command /tmp/scenario3-reinstall.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes
   run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.json > /dev/null"
 
-  log "scenario 4: topology switch to vision-reality with custom cert dir"
+  log "scenario 4: fresh vision-reality install with custom cert dir"
+  run_uninstall_command /tmp/scenario4-uninstall.log
   CURRENT_SCENARIO="scenario 4 topology switch"
   run_in_container "mkdir -p /tmp/certs && openssl req -x509 -nodes -newkey rsa:2048 -keyout /tmp/certs/privkey.pem -out /tmp/certs/fullchain.pem -days 1 -subj '/CN=example.com' > /dev/null 2>&1 && chmod 644 /tmp/certs/fullchain.pem && chmod 640 /tmp/certs/privkey.pem"
   run_in_container "cd /workspace/xray && XRAY_CERT_DIR=/tmp/certs ./bin/xrf install --topology vision-reality --domain example.com --version '${SMOKE_XRAY_VERSION}' --yes > /tmp/scenario4.log 2>&1"
