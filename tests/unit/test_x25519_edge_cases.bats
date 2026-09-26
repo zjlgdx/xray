@@ -298,68 +298,12 @@ SCRIPT
   [ "$status" -ne 0 ]
 }
 
-@test "x25519::derive_public_key - tries --key= format as fallback" {
-  local fake_xray="${BATS_TEST_TMPDIR}/xray-eq-format"
-  cat <<'SCRIPT' > "${fake_xray}"
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1}" == "x25519" ]]; then
-  shift
-  case "${1:-}" in
-    --key=*)
-      printf 'Public key: derived-%s\n' "${1#*=}"
-      exit 0
-      ;;
-    *)
-      exit 1
-      ;;
-  esac
-fi
-exit 1
-SCRIPT
-  chmod +x "${fake_xray}"
-
-  local result
-  result="$(x25519::derive_public_key "${fake_xray}" "testkey=")"
-  [ "${result}" = "derived-testkey=" ]
-}
-
-@test "x25519::derive_public_key - tries -key flag" {
-  local fake_xray="${BATS_TEST_TMPDIR}/xray-dash-key"
-  cat <<'SCRIPT' > "${fake_xray}"
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1}" == "x25519" ]]; then
-  shift
-  case "${1:-}" in
-    --key)
-      exit 1
-      ;;
-    -key)
-      shift
-      printf 'Public key: derived-%s\n' "${1:-}"
-      exit 0
-      ;;
-    *)
-      exit 1
-      ;;
-  esac
-fi
-exit 1
-SCRIPT
-  chmod +x "${fake_xray}"
-
-  local result
-  result="$(x25519::derive_public_key "${fake_xray}" "testkey=")"
-  [ "${result}" = "derived-testkey=" ]
-}
-
 @test "x25519::derive_public_key - handles new Password format in output" {
   local fake_xray="${BATS_TEST_TMPDIR}/xray-password-format"
   cat <<'SCRIPT' > "${fake_xray}"
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "${1}" == "x25519" && "${2:-}" == "--key" ]]; then
+if [[ "$#" -eq 3 && "${1}" == "x25519" && "${2}" == "-i" ]]; then
   printf 'PrivateKey: input-key\nPassword: derived-public-key\nHash32: some-hash\n'
   exit 0
 fi

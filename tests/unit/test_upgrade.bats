@@ -8,6 +8,7 @@ setup() {
   mkdir -p "${XRF_PREFIX}/bin" "${XRF_ETC}/xray/releases/old" "${XRF_VAR}"
   ln -s "${XRF_ETC}/xray/releases/old" "${XRF_ETC}/xray/active"
   printf '%s\n' '{"log":{"access":"/var/log/xray/access.log","loglevel":"debug"}}' > "${XRF_ETC}/xray/active/00_log.json"
+  printf '%s\n' '{"inbounds":[{"streamSettings":{"network":"raw","realitySettings":{"target":"www.microsoft.com:443","shortIds":["","aaaa","bbbb"]}}}]}' > "${XRF_ETC}/xray/active/05_inbounds.json"
   printf '%s\n' '{"version":"v1.0.0","xray":{"uuid":"keep-me"}}' > "$(state::path)"
   cat > "$(xray::bin)" <<'SCRIPT'
 #!/usr/bin/env bash
@@ -45,12 +46,15 @@ teardown() { cleanup_test_env; }
 
 @test "upgrade preserves config and credentials, restarts and commits version" {
   before="$(sha256sum "${XRF_ETC}/xray/active/00_log.json")"
+  pool_before="$(sha256sum "${XRF_ETC}/xray/active/05_inbounds.json")"
   run xray::upgrade v2.0.0
   [ "$status" -eq 0 ]
   [ "$(xray::installed_version)" = v2.0.0 ]
   [ "$(jq -r .version "$(state::path)")" = v2.0.0 ]
   [ "$(jq -r .xray.uuid "$(state::path)")" = keep-me ]
   [ "$before" = "$(sha256sum "${XRF_ETC}/xray/active/00_log.json")" ]
+  [ "$pool_before" = "$(sha256sum "${XRF_ETC}/xray/active/05_inbounds.json")" ]
+  jq -e '.inbounds[0].streamSettings.realitySettings.shortIds == ["","aaaa","bbbb"]' "${XRF_ETC}/xray/active/05_inbounds.json"
   grep -q '^restart xray$' "${UPGRADE_CALLS}"
   backup="$(find "${XRF_VAR}/upgrades" -name state.json | head -n 1)"
   [ "$(jq -r .version "$backup")" = v1.0.0 ]
@@ -148,7 +152,7 @@ teardown() { cleanup_test_env; }
 
 @test "install permits a dry-run after uninstall left only historical state" {
   rm -rf "$(xray::confbase)" "$(xray::bin)"
-  run "${PROJECT_ROOT}/commands/install.sh" --dry-run
+  run env XRAY_SNI=sni.example.com "${PROJECT_ROOT}/commands/install.sh" --dry-run
   [ "$status" -eq 0 ]
   [[ "$output" == *'Installation Preview'* ]]
   [ "$(jq -r .xray.uuid "$(state::path)")" = keep-me ]

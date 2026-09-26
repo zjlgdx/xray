@@ -92,7 +92,9 @@ teardown() {
   [ -f "$(state::path)" ]
   local perms
   perms=$(stat -c "%a" "$(state::path)" 2>/dev/null || stat -f "%Lp" "$(state::path)")
-  [[ "${perms}" == "644" ]]
+  [[ "${perms}" == "600" ]]
+  perms=$(stat -c "%a" "$(state::dir)" 2>/dev/null || stat -f "%Lp" "$(state::dir)")
+  [[ "${perms}" == "700" ]]
 }
 
 @test "state::save - handles multiline JSON" {
@@ -196,14 +198,4 @@ teardown() {
   local content
   content="$(cat "$(state::path)")"
   [[ "${content}" == "${test_json}" ]]
-}
-
-@test "state::save and state::load - round trip with vless encryption fields" {
-  local test_json='{"name":"reality-only","version":"v26.2.6","xray":{"uuid":"11111111-2222-3333-4444-555555555555","vless_decryption":"mlkem768x25519plus.native.600s.serverkey","vless_encryption":"mlkem768x25519plus.native.0rtt.clientkey"}}'
-
-  state::save "${test_json}"
-
-  run state::load
-  [ "$status" -eq 0 ]
-  [[ "${output}" == "${test_json}" ]]
 }

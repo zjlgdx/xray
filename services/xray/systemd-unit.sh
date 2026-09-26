@@ -4,7 +4,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${HERE}/lib/core.sh"
 . "${HERE}/modules/io.sh"
 . "${HERE}/modules/user/user.sh"
-. "${HERE}/lib/plugins.sh"
 . "${HERE}/modules/state.sh"
 # shellcheck source=services/xray/common.sh
 . "${HERE}/services/xray/common.sh"
@@ -41,11 +40,11 @@ systemd_unit_path() {
   echo "${base%/}/xray.service"
 }
 install_unit_with_lock() {
-  user::ensure_system_user xray xray
+  user::ensure_system_user xray xray || return 1
   local unit_file
   unit_file="$(systemd_unit_path)"
   core::log info "preparing systemd unit directory" "$(printf '{"dir":"%s"}' "$(dirname "${unit_file}")")"
-  io::ensure_dir "$(dirname "${unit_file}")" 0755
+  io::ensure_dir "$(dirname "${unit_file}")" 0755 || return 1
   core::log info "writing systemd unit file" "$(printf '{"path":"%s"}' "${unit_file}")"
   if ! systemd::render_xray_unit | io::atomic_write "${unit_file}" 0644; then
     core::log error "failed to write systemd unit" "$(printf '{"path":"%s"}' "${unit_file}")"
@@ -63,9 +62,6 @@ install_unit_with_lock() {
     rollback_systemd_unit "${unit_file}"
     return 1
   fi
-  plugins::ensure_dirs
-  plugins::load_enabled
-  plugins::emit service_setup "unit=${unit_file}"
   core::log info "systemd unit installed" "$(printf '{"path":"%s"}' "${unit_file}")"
 }
 rollback_systemd_unit() {
@@ -86,17 +82,16 @@ remove_unit() {
   core::init "${@}"
   local unit_file
   unit_file="$(systemd_unit_path)"
-  plugins::ensure_dirs
-  plugins::load_enabled
-  plugins::emit service_remove "unit=${unit_file}"
   systemctl disable --now xray || true
   rm -f "${unit_file}"
   systemctl daemon-reload || true
   systemctl reset-failed xray.service 2> /dev/null || true
   core::log info "systemd unit removed" "{}"
 }
-case "${1-}" in install) install_unit "${@}" ;; remove) remove_unit "${@}" ;; *)
-  echo "Usage: ${0} {install|remove}"
-  exit 2
-  ;;
-esac
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  case "${1-}" in install) install_unit "${@}" ;; remove) remove_unit "${@}" ;; *)
+    echo "Usage: ${0} {install|remove}"
+    exit 2
+    ;;
+  esac
+fi

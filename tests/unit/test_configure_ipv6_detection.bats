@@ -26,6 +26,7 @@ SCRIPT
   export XRAY_UUID="11111111-1111-4111-8111-111111111111"
   export XRAY_SHORT_ID="abcd1234"
   export XRAY_PRIVATE_KEY="test-private-key"
+  export XRAY_SNI="www.microsoft.com"
   export XRAY_REALITY_DEST="www.microsoft.com:443"
 }
 

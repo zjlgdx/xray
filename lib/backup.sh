@@ -559,10 +559,11 @@ backup::restore() {
   state_file="$(state::path)"
 
   if [[ -f "${tmpdir}/state.json" ]]; then
-    io::ensure_dir "$(dirname "${state_file}")" 0755
-    cp "${tmpdir}/state.json" "${state_file}" 2> /dev/null || {
-      core::log warn "failed to restore state file" "$(printf '{"file":"%s"}' "${state_file}")"
-    }
+    if ! state::save "$(cat "${tmpdir}/state.json")"; then
+      core::log error "failed to restore private state file" "$(printf '{"file":"%s"}' "${state_file}")"
+      rm -rf "${tmpdir}" 2> /dev/null || true
+      return 1
+    fi
   fi
 
   # Cleanup temporary directory (restoration complete)

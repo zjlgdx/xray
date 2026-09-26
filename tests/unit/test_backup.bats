@@ -308,3 +308,17 @@ EOF
   result=$(backup::list)
   [[ "$result" == *"No backups found"* ]]
 }
+
+@test "backup restore writes private state without reopening its directory" {
+  setup_mock_xray
+  backup::create "private-state" > /dev/null
+  local backup_name
+  backup_name="$(basename "$(find "$(backup::dir)" -name 'private-state-*.tar.gz' | head -1)" .tar.gz)"
+  chmod 0755 "$(state::dir)"
+  chmod 0644 "$(state::path)"
+  systemctl() { return 0; }
+  run backup::restore "${backup_name}"
+  [ "$status" -eq 0 ]
+  [ "$(stat -c '%a' "$(state::dir)" 2>/dev/null || stat -f '%Lp' "$(state::dir)")" = 700 ]
+  [ "$(stat -c '%a' "$(state::path)" 2>/dev/null || stat -f '%Lp' "$(state::path)")" = 600 ]
+}

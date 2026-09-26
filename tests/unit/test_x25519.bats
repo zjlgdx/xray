@@ -90,69 +90,19 @@ teardown() {
   [ "${public}" = "mZfV1WnfSeV9suWvikz6p/GWCJWl7XA6e39sVe7Mkho=" ]
 }
 
-@test "x25519::derive_public_key uses --key flag when available" {
+@test "x25519::derive_public_key parses the official Password output" {
   local fake_xray="${BATS_TEST_TMPDIR}/xray-bin"
   cat <<'SCRIPT' > "${fake_xray}"
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "${1}" == "x25519" ]]; then
-  shift
-  case "${1:-}" in
-    --key)
-      shift
-      printf 'Public key: derived-%s\n' "${1:-}"
-      exit 0
-      ;;
-    --key=*)
-      printf 'Public key: derived-%s\n' "${1#*=}"
-      exit 0
-      ;;
-    *)
-      exit 1
-      ;;
-  esac
-fi
-exit 1
+[[ "$#" -eq 3 && "$1" == x25519 && "$2" == -i ]] || exit 2
+printf 'PrivateKey: %s\nPassword: derived-%s\n' "$3" "$3"
 SCRIPT
   chmod +x "${fake_xray}"
 
   local result
   result="$(x25519::derive_public_key "${fake_xray}" "aaaa=")"
   [ "${result}" = "derived-aaaa=" ]
-}
-
-@test "x25519::derive_public_key falls back to -k flag" {
-  local fake_xray="${BATS_TEST_TMPDIR}/xray-bin-fallback"
-  cat <<'SCRIPT' > "${fake_xray}"
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${1}" == "x25519" ]]; then
-  shift
-  case "${1:-}" in
-    --key|-key)
-      exit 1
-      ;;
-    -k)
-      shift
-      printf 'Public key: fallback-%s\n' "${1:-}"
-      exit 0
-      ;;
-    -k=*)
-      printf 'Public key: fallback-%s\n' "${1#*=}"
-      exit 0
-      ;;
-    *)
-      exit 1
-      ;;
-  esac
-fi
-exit 1
-SCRIPT
-  chmod +x "${fake_xray}"
-
-  local result
-  result="$(x25519::derive_public_key "${fake_xray}" "bbbb=")"
-  [ "${result}" = "fallback-bbbb=" ]
 }
 
 @test "x25519::derive_public_key returns failure when no output" {
@@ -166,4 +116,17 @@ SCRIPT
 
   run x25519::derive_public_key "${fake_xray}" "cccc="
   [ "$status" -ne 0 ]
+}
+
+@test "x25519::derive_public_key uses current -i private-key interface" {
+  local fake_xray="${BATS_TEST_TMPDIR}/xray-current"
+  cat > "${fake_xray}" <<'SCRIPT'
+#!/usr/bin/env bash
+[[ "$#" -eq 3 && "$1" == x25519 && "$2" == -i && "$3" == privatekey ]] || exit 2
+printf 'PrivateKey: privatekey\nPassword: current-public\n'
+SCRIPT
+  chmod +x "${fake_xray}"
+  run x25519::derive_public_key "${fake_xray}" privatekey
+  [ "$status" -eq 0 ]
+  [ "$output" = current-public ]
 }

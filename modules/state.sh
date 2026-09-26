@@ -27,8 +27,10 @@ state::lock() {
 
 state::save() {
   local j="${1}"
-  io::ensure_dir "$(state::dir)" 0755
-  io::atomic_write "$(state::path)" 0644 <<< "${j}"
+  io::ensure_dir "$(state::dir)" 0700 || return 1
+  chmod 0700 "$(state::dir)" || return 1
+  io::atomic_write "$(state::path)" 0600 <<< "${j}" || return 1
+  chmod 0600 "$(state::path)"
 }
 state::load() {
   local p

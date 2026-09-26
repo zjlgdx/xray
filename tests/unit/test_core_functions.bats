@@ -169,6 +169,106 @@ teardown() {
   [ "$status" -eq 42 ]
 }
 
+@test "core::with_flock - no-flock strict failure releases directory lock" {
+  local lock_file="${TEST_TMPDIR}/fallback.lock"
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/core.sh"
+    command() {
+      if [[ "$1" == -v && "$2" == flock ]]; then return 1; fi
+      builtin command "$@"
+    }
+    core::with_flock "$2" false
+  ' _ "${PROJECT_ROOT}" "${lock_file}"
+  [ "$status" -ne 0 ]
+  [ ! -d "${lock_file}.d" ]
+
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/core.sh"
+    command() {
+      if [[ "$1" == -v && "$2" == flock ]]; then return 1; fi
+      builtin command "$@"
+    }
+    XRF_FLOCK_TIMEOUT_SEC=1 core::with_flock "$2" true
+  ' _ "${PROJECT_ROOT}" "${lock_file}"
+  [ "$status" -eq 0 ]
+  [ ! -d "${lock_file}.d" ]
+}
+
+@test "core::with_flock - no-flock callback preserves strict and non-strict behavior" {
+  local lock_file="${TEST_TMPDIR}/fallback-strict.lock"
+  run bash -c '
+    set -euo pipefail
+    source "$1/lib/core.sh"
+    command() {
+      if [[ "$1" == -v && "$2" == flock ]]; then return 1; fi
+      builtin command "$@"
+    }
+    callback() { false; printf "CALLBACK_CONTINUED\n"; }
+    core::with_flock "$2" callback
+    printf "WRAPPER_RETURNED_SUCCESS\n"
+  ' _ "${PROJECT_ROOT}" "${lock_file}"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *CALLBACK_CONTINUED* && "$output" != *WRAPPER_RETURNED_SUCCESS* ]]
+  [ ! -d "${lock_file}.d" ]
+
+  run bash -c '
+    set -uo pipefail
+    source "$1/lib/core.sh"
+    command() {
+      if [[ "$1" == -v && "$2" == flock ]]; then return 1; fi
+      builtin command "$@"
+    }
+    callback() { false; printf "CALLBACK_CONTINUED\n"; }
+    core::with_flock "$2" callback
+    callback() { return 42; }
+    core::with_flock "$2" callback
+    [[ "$?" -eq 42 ]]
+  ' _ "${PROJECT_ROOT}" "${lock_file}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *CALLBACK_CONTINUED* ]]
+  [ ! -d "${lock_file}.d" ]
+}
+
+@test "core::with_flock - concurrent first creation locks one inode" {
+  [[ "$(uname -s)" == Linux ]] || skip "requires Linux flock"
+  command -v flock > /dev/null 2>&1 || skip "flock not available"
+
+  run bash -c '
+    set -e
+    source "$1/lib/core.sh"
+    d=$(mktemp -d)
+    test() {
+      if [[ "${ROLE:-}" == B && "$*" == "-f $d/lock" && ! -f "$d/b-ready" ]]; then
+        local rc=0
+        builtin test "$@" || rc=$?
+        touch "$d/b-ready"
+        while [[ ! -f "$d/a-locked" ]]; do sleep 0.01; done
+        return "$rc"
+      fi
+      builtin test "$@"
+    }
+    probe_a() {
+      touch "$d/a-locked"
+      for i in {1..100}; do
+        if [[ -f "$d/b-entered" ]]; then printf "OVERLAPPING_LOCK_CALLBACKS\n"; return 0; fi
+        sleep 0.01
+      done
+      printf "NO_OVERLAP\n"
+    }
+    probe_b() { touch "$d/b-entered"; }
+    ROLE=B core::with_flock "$d/lock" probe_b &
+    b_pid=$!
+    while [[ ! -f "$d/b-ready" ]]; do sleep 0.01; done
+    ROLE=A core::with_flock "$d/lock" probe_a
+    wait "$b_pid"
+  ' _ "${PROJECT_ROOT}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *NO_OVERLAP* ]]
+  [[ "$output" != *OVERLAPPING_LOCK_CALLBACKS* ]]
+}
+
 # Log format consistency tests
 @test "core::log - text format uses consistent width (%-8s)" {
   XRF_JSON=false

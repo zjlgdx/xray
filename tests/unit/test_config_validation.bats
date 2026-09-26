@@ -119,33 +119,6 @@ JSON
   [ "$status" -eq 1 ]
 }
 
-@test "config::validate_business_rules - fails when tls certificate files are missing" {
-  local confdir="${TEST_TMPDIR}/conf-missing-cert"
-  make_valid_confdir "${confdir}"
-  cat > "${confdir}/05_inbounds.json" <<'JSON'
-{
-  "inbounds": [
-    {
-      "tag": "vision",
-      "port": 8443,
-      "protocol": "vless",
-      "streamSettings": {
-        "security": "tls",
-        "tlsSettings": {
-          "certificates": [
-            {"certificateFile":"/tmp/not-found-cert.pem","keyFile":"/tmp/not-found-key.pem"}
-          ]
-        }
-      }
-    }
-  ]
-}
-JSON
-
-  run config::validate_business_rules "${confdir}"
-  [ "$status" -eq 1 ]
-}
-
 @test "config::validate_deep - passes for valid config directory" {
   local confdir="${TEST_TMPDIR}/conf-valid-deep"
   make_valid_confdir "${confdir}"

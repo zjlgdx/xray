@@ -79,18 +79,19 @@ setup() {
 
 teardown() { cleanup_test_env; }
 
-@test "log rendering preserves existing paths, level and extra fields" {
+@test "log rendering sends access and error to journald stdout" {
   run xray::write_base_configs "$NEW"
   [ "$status" -eq 0 ]
-  [ "$(jq -Sc .log "${OLD}/00_log.json")" = "$(jq -Sc .log "${NEW}/00_log.json")" ]
+  [ "$(jq -r .log.access "${NEW}/00_log.json")" = '' ]
+  [ "$(jq -r .log.error "${NEW}/00_log.json")" = '' ]
 }
 
-@test "log level override preserves destinations and permits explicit stdout" {
-  export XRAY_LOG_LEVEL=info XRAY_ERROR_LOG=''
+@test "log level override keeps journald destinations" {
+  export XRAY_LOG_LEVEL=info
   run xray::write_base_configs "$NEW"
   [ "$status" -eq 0 ]
   [ "$(jq -r .log.loglevel "${NEW}/00_log.json")" = info ]
-  [ "$(jq -r .log.access "${NEW}/00_log.json")" = /var/log/xray/access.log ]
+  [ "$(jq -r .log.access "${NEW}/00_log.json")" = '' ]
   [ "$(jq -r .log.error "${NEW}/00_log.json")" = '' ]
 }
 

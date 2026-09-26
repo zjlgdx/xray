@@ -18,24 +18,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Initialize default values
 args::init() {
   TOPOLOGY="${DEFAULT_TOPOLOGY}"
-  DOMAIN=""
   VERSION="${DEFAULT_VERSION}"
-  PLUGINS=""
   DEBUG="${DEFAULT_XRF_DEBUG}"
   UUID=""
   UUID_FROM_STRING=""
   XRF_YES="false"
   XRF_DRY_RUN="false"
-  TEMPLATE=""
   FINGERPRINT="${DEFAULT_XRAY_FINGERPRINT}"
-  VLESS_ENCRYPTION_ENABLED="${DEFAULT_XRAY_VLESS_ENCRYPTION_ENABLED}"
-  VLESS_DECRYPTION=""
-  VLESS_ENCRYPTION=""
-
-  # Tracking flags for explicit CLI arguments (used by template override logic)
-  _TOPOLOGY_EXPLICIT=""
-  _VERSION_EXPLICIT=""
-  _PLUGINS_EXPLICIT=""
 }
 
 # Parse command line arguments
@@ -45,12 +34,6 @@ args::parse() {
       --topology | -t)
         args::validate_topology "${2:-}" || return 1
         TOPOLOGY="${2}"
-        _TOPOLOGY_EXPLICIT="true"
-        shift 2
-        ;;
-      --domain | -d)
-        args::validate_domain "${2:-}" || return 1
-        DOMAIN="${2}"
         shift 2
         ;;
       --fingerprint | -f)
@@ -61,12 +44,6 @@ args::parse() {
       --version | -v)
         args::validate_version "${2:-}" || return 1
         VERSION="${2}"
-        _VERSION_EXPLICIT="true"
-        shift 2
-        ;;
-      --plugins | -p)
-        PLUGINS="${2:-}"
-        _PLUGINS_EXPLICIT="true"
         shift 2
         ;;
       --uuid)
@@ -75,26 +52,6 @@ args::parse() {
         ;;
       --uuid-from-string)
         UUID_FROM_STRING="${2:-}"
-        shift 2
-        ;;
-      --template)
-        TEMPLATE="${2:-}"
-        shift 2
-        ;;
-      --enable-vless-encryption)
-        VLESS_ENCRYPTION_ENABLED="true"
-        shift
-        ;;
-      --vless-decryption)
-        args::validate_vless_crypto "${2:-}" || return 1
-        VLESS_DECRYPTION="${2:-}"
-        VLESS_ENCRYPTION_ENABLED="true"
-        shift 2
-        ;;
-      --vless-encryption)
-        args::validate_vless_crypto "${2:-}" || return 1
-        VLESS_ENCRYPTION="${2:-}"
-        VLESS_ENCRYPTION_ENABLED="true"
         shift 2
         ;;
       --debug)
@@ -124,8 +81,6 @@ args::parse() {
   done
 
   # Validate configuration
-  args::validate_config || return 1
-
   # Validate UUID parameters if provided
   if [[ -n "${UUID}" && -n "${UUID_FROM_STRING}" ]]; then
     core::log error "cannot use both --uuid and --uuid-from-string" "{}"
@@ -133,9 +88,7 @@ args::parse() {
   fi
 
   # Export variables for use by other modules
-  export TOPOLOGY DOMAIN VERSION PLUGINS DEBUG UUID UUID_FROM_STRING XRF_YES XRF_DRY_RUN TEMPLATE FINGERPRINT
-  export VLESS_ENCRYPTION_ENABLED VLESS_DECRYPTION VLESS_ENCRYPTION
-  export _TOPOLOGY_EXPLICIT _VERSION_EXPLICIT _PLUGINS_EXPLICIT
+  export TOPOLOGY VERSION DEBUG UUID UUID_FROM_STRING XRF_YES XRF_DRY_RUN FINGERPRINT
 
   return 0
 }
@@ -149,7 +102,7 @@ args::validate_topology() {
   fi
 
   case "${topology}" in
-    reality-only | vision-reality)
+    reality-only)
       return 0
       ;;
     *)
@@ -157,24 +110,6 @@ args::validate_topology() {
       return 1
       ;;
   esac
-}
-
-# Domain validation
-args::validate_domain() {
-  local domain="${1:-}"
-
-  if [[ -z "${domain}" ]]; then
-    return 0 # Domain is optional for reality-only
-  fi
-
-  # Use shared validator (RFC compliant, length limits, internal domain check)
-  # Validator logs specific rejection reason via debug output
-  if ! validators::domain "${domain}"; then
-    error_codes::invalid_domain "${domain}" "see debug log for details"
-    return 1
-  fi
-
-  return 0
 }
 
 # Version validation
@@ -211,47 +146,14 @@ args::validate_fingerprint() {
   return 0
 }
 
-# VLESS crypto value validation
-args::validate_vless_crypto() {
-  local value="${1:-}"
-  if [[ -z "${value}" ]]; then
-    core::log error "vless crypto value cannot be empty" "{}"
-    return 1
-  fi
-
-  if ! validators::vless_crypto_value "${value}"; then
-    core::log error "invalid vless crypto value" "$(printf '{"value":"%s"}' "${value}")"
-    return 1
-  fi
-
-  return 0
-}
-
-# Configuration validation
-args::validate_config() {
-  # vision-reality topology requires domain
-  if [[ "${TOPOLOGY}" == "vision-reality" && -z "${DOMAIN}" ]]; then
-    error_codes::missing_parameter "domain" "vision-reality topology"
-    return 1
-  fi
-
-  return 0
-}
-
 # Show help for common arguments
 args::show_help() {
   cat << EOF
 Options:
-  --topology, -t <type>         Installation topology (reality-only|vision-reality)
-  --domain, -d <domain>         Domain for vision-reality topology (required)
+  --topology, -t reality-only   REALITY installation (default)
   --fingerprint, -f <type>      TLS fingerprint (default: chrome)
                                 Valid: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized
   --version, -v <version>       Xray version to install (default: latest)
-  --template <id>               Use pre-built template (home|office|server)
-  --plugins, -p <list>          Comma-separated list of plugins to enable
-  --enable-vless-encryption     Enable optional VLESS post-quantum encryption
-  --vless-decryption <value>    Custom VLESS inbound decryption value
-  --vless-encryption <value>    Custom VLESS outbound encryption value (for links)
   --uuid <uuid>                 Custom UUID (default: auto-generated)
   --uuid-from-string <string>   Generate UUID from custom string
   --yes, -y                     Auto-confirm installation (skip prompt)
@@ -263,15 +165,6 @@ Examples:
   # Reality-only topology
   --topology reality-only
 
-  # Install with home template (quick start)
-  --template home
-
-  # Install with office template and custom domain
-  --template office --domain vpn.company.com
-
-  # Vision-Reality with domain and plugins
-  --topology vision-reality --domain your.domain.com --plugins cert-auto
-
   # Preview without installing
   --topology reality-only --dry-run
 
@@ -281,38 +174,22 @@ Examples:
   # Specific version
   --version v1.8.1
 
-  # List available templates
-  xrf templates list
-
 EOF
 }
 
 # Show current configuration (debug helper)
 args::show_config() {
   if [[ "${DEBUG}" == "true" ]]; then
-    core::log debug "parsed arguments" "$(printf '{"topology":"%s","domain":"%s","version":"%s","plugins":"%s","fingerprint":"%s","debug":"%s","vless_encryption_enabled":"%s"}' \
-      "${TOPOLOGY}" "${DOMAIN}" "${VERSION}" "${PLUGINS}" "${FINGERPRINT}" "${DEBUG}" "${VLESS_ENCRYPTION_ENABLED}")"
+    core::log debug "parsed arguments" "$(printf '{"topology":"%s","version":"%s","fingerprint":"%s","debug":"%s"}' \
+      "${TOPOLOGY}" "${VERSION}" "${FINGERPRINT}" "${DEBUG}")"
   fi
 }
 
 # Export parsed arguments as environment variables
 args::export_vars() {
-  # Set XRAY_DOMAIN for Xray configuration
-  if [[ -n "${DOMAIN}" ]]; then
-    export XRAY_DOMAIN="${DOMAIN}"
-  fi
-
   # Set XRAY_FINGERPRINT for client link generation
   if [[ -n "${FINGERPRINT}" ]]; then
     export XRAY_FINGERPRINT="${FINGERPRINT}"
-  fi
-
-  export XRAY_VLESS_ENCRYPTION_ENABLED="${VLESS_ENCRYPTION_ENABLED}"
-  if [[ -n "${VLESS_DECRYPTION}" ]]; then
-    export XRAY_VLESS_DECRYPTION="${VLESS_DECRYPTION}"
-  fi
-  if [[ -n "${VLESS_ENCRYPTION}" ]]; then
-    export XRAY_VLESS_ENCRYPTION="${VLESS_ENCRYPTION}"
   fi
 
   # Set XRF_DEBUG for core module

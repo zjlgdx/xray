@@ -20,10 +20,6 @@ teardown() {
 
     [[ -n "${DEFAULT_TOPOLOGY:-}" ]]
     [[ -n "${DEFAULT_XRAY_PORT:-}" ]]
-    [[ -n "${DEFAULT_XRAY_REALITY_PORT:-}" ]]
-    [[ -n "${DEFAULT_XRAY_VISION_PORT:-}" ]]
-    [[ -n "${DEFAULT_XRAY_FALLBACK_PORT:-}" ]]
-    [[ -n "${DEFAULT_XRAY_SNI:-}" ]]
     [[ -n "${DEFAULT_XRAY_FINGERPRINT:-}" ]]
     [[ -n "${DEFAULT_XRAY_LOG_LEVEL:-}" ]]
     [[ -n "${DEFAULT_VERSION:-}" ]]
@@ -41,9 +37,6 @@ teardown() {
 
     ports=(
       "${DEFAULT_XRAY_PORT}"
-      "${DEFAULT_XRAY_REALITY_PORT}"
-      "${DEFAULT_XRAY_VISION_PORT}"
-      "${DEFAULT_XRAY_FALLBACK_PORT}"
     )
 
     for port in "${ports[@]}"; do
@@ -63,16 +56,11 @@ teardown() {
     . "${project_root}/lib/defaults.sh"
 
     case "${DEFAULT_TOPOLOGY}" in
-      reality-only|vision-reality) ;;
+      reality-only) ;;
       *) exit 1 ;;
     esac
 
     case "${DEFAULT_XRAY_SNIFFING}" in
-      true|false) ;;
-      *) exit 1 ;;
-    esac
-
-    case "${DEFAULT_XRAY_VLESS_ENCRYPTION_ENABLED}" in
       true|false) ;;
       *) exit 1 ;;
     esac

@@ -606,7 +606,7 @@ core::ensure_lock_writable() {
 #   2 - Missing command argument
 #
 # Security:
-#   - Uses install(1) for atomic file creation (prevents TOCTOU - CWE-362)
+#   - Opens lock files without replacing an inode held by another process
 #   - Fixes ownership to current user (handles sudo remnants - CWE-283)
 #   - Executes in subshell with fd 200 to release lock automatically
 #   - Ensures writable lock file for all legitimate users
@@ -632,13 +632,15 @@ core::with_flock() {
     fi
   fi
 
-  # Security: Atomic lock file creation with correct ownership and permissions
-  # Use install(1) instead of touch + chown to prevent TOCTOU window
+  # An append open creates the file without replacing an inode another process
+  # may already have locked after the existence check.
   if ! test -f "${lock}" 2> /dev/null; then
-    if ! install -m 0644 -o "$(id -u)" -g "$(id -g)" /dev/null "${lock}" 2> /dev/null; then
+    if ! (
+      umask 022
+      : >> "${lock}"
+    ) 2> /dev/null; then
       core::log warn "lock file creation needs sudo" "$(printf '{"file":"%s"}' "$(core::json_escape "${lock}")")"
-      # Use install with sudo for atomic creation (single syscall, no TOCTOU)
-      core::sudo_cmd install -m 0644 -o "$(id -u)" -g "$(id -g)" /dev/null "${lock}" 2> /dev/null || true
+      core::sudo_cmd bash -c 'umask 022; : >> "$1"' _ "${lock}" 2> /dev/null || true
     fi
   fi
 
@@ -653,7 +655,7 @@ core::with_flock() {
 
   if command -v flock > /dev/null 2>&1; then
     (
-      exec 200> "${lock}"
+      exec 200>> "${lock}"
       if ! flock -w "${lock_timeout}" -x 200; then
         core::log error "timed out waiting for lock" "$(printf '{"lock":"%s","timeout_sec":%d}' "$(core::json_escape "${lock}")" "${lock_timeout}")"
         exit 1
@@ -675,8 +677,15 @@ core::with_flock() {
     sleep 0.1
   done
 
-  "${@}"
-  local rc=$?
+  local rc had_errexit=false
+  [[ "$-" == *e* ]] && had_errexit=true
+  set +e
+  (
+    [[ "${had_errexit}" == true ]] && set -e
+    "${@}"
+  )
+  rc=$?
+  [[ "${had_errexit}" == true ]] && set -e
   rmdir "${lock_dir}" 2> /dev/null || true
   return "${rc}"
 }

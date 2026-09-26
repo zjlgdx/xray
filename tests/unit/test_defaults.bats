@@ -23,18 +23,6 @@ teardown() {
   [ "${DEFAULT_XRAY_PORT}" = "443" ]
 }
 
-@test "DEFAULT_XRAY_VISION_PORT is 8443" {
-  [ "${DEFAULT_XRAY_VISION_PORT}" = "8443" ]
-}
-
-@test "DEFAULT_XRAY_REALITY_PORT is 443" {
-  [ "${DEFAULT_XRAY_REALITY_PORT}" = "443" ]
-}
-
-@test "DEFAULT_XRAY_FALLBACK_PORT is 8080" {
-  [ "${DEFAULT_XRAY_FALLBACK_PORT}" = "8080" ]
-}
-
 @test "DEFAULT_CADDY_CERT_BASE path" {
   [ "${DEFAULT_CADDY_CERT_BASE}" = "/root/.local/share/caddy/certificates" ]
 }
@@ -43,8 +31,8 @@ teardown() {
   [ "${DEFAULT_XRAY_CERT_DIR}" = "/usr/local/etc/xray/certs" ]
 }
 
-@test "DEFAULT_XRAY_SNI is www.apple.com" {
-  [ "${DEFAULT_XRAY_SNI}" = "www.apple.com" ]
+@test "no implicit REALITY SNI target is defined" {
+  [ -z "${DEFAULT_XRAY_SNI:-}" ]
 }
 
 @test "DEFAULT_XRAY_SNIFFING is true" {
@@ -69,10 +57,6 @@ teardown() {
 
 @test "DEFAULT_VERSION is latest" {
   [ "${DEFAULT_VERSION}" = "latest" ]
-}
-
-@test "DEFAULT_XRAY_VLESS_ENCRYPTION_ENABLED is false" {
-  [ "${DEFAULT_XRAY_VLESS_ENCRYPTION_ENABLED}" = "false" ]
 }
 
 # === Path Functions Tests ===
