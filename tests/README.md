@@ -40,7 +40,7 @@ Retired plugin, template, dual-topology, Caddy, certificate, firewall, sysctl, a
 
 ## Evidence boundaries
 
-The latest local acceptance for this change recorded 978 unit passes with 16 skips, 33 integration passes with 1 skip, and five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
+The unused-helper cleanup on 2026-09-26 recorded 851 unit passes with 16 skips and 32 integration passes with 1 skip. The preceding REALITY-only change recorded five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9; those Docker scenarios were not rerun for this cleanup. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
 
 ## Bats and coverage setup
 
