@@ -27,6 +27,10 @@ not pinned to that tag. Existing installations use
 `sudo xrf upgrade --version latest`. Legacy or unknown configuration layouts
 are not automatically migrated.
 
+The installed tool contains runtime scripts, the systemd unit, the standalone
+uninstaller, and the license. Development tests and documentation remain in the
+repository. Installer help is available without creating temporary files.
+
 ## Commands
 
 | Command | Description |

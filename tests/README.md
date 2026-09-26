@@ -40,7 +40,7 @@ Retired plugin, template, dual-topology, Caddy, certificate, firewall, sysctl, a
 
 ## Evidence boundaries
 
-The unused-helper cleanup on 2026-09-26 recorded 851 unit passes with 16 skips and 32 integration passes with 1 skip. The preceding REALITY-only change recorded five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9; those Docker scenarios were not rerun for this cleanup. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
+The runtime-payload cleanup on 2026-09-26 recorded 853 unit passes with 16 skips and 32 integration passes with 1 skip on the macOS host. A fresh Ubuntu 24.04 container also passed ShellCheck on the installer and the online-wrapper Bats suite (27 passed, 1 skipped); these wrapper tests use mocked services. The preceding REALITY-only change recorded five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9; those Docker scenarios were not rerun for this cleanup. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
 
 ## Bats and coverage setup
 
@@ -51,3 +51,8 @@ For isolated tests, use `setup_test_env`/`cleanup_test_env` from `tests/test_hel
 ## Retired helper coverage
 
 Tests follow production entry points. Unused dependency/plugin installers, structured error-message helpers, VLESS encryption validators, and duplicate utility APIs have been removed together with their isolated tests. UUID generation still validates its output through the shared validator; core initialization still checks actual shell options. Lifecycle, rollback, credential protection, and configuration validation tests remain in scope.
+
+Online-wrapper tests verify that `--help` needs no temporary directory and that
+the deployed runtime omits development files while retaining runnable commands,
+the systemd unit, and the license. Wrapper lifecycle tests still cover repeat
+installation refusal, uninstall/reinstall, and failure cleanup.

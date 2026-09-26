@@ -37,6 +37,12 @@ Thank you for your interest in contributing to xray-fusion! This document provid
 
 ### Development Environment Setup
 
+Develop from a Git checkout. The online installer deploys only `bin/`, `commands/`,
+`lib/`, `modules/`, `services/`, `packaging/`, `uninstall.sh`, and `LICENSE`; it
+preserves executable modes from the verified checkout. Tests, docs, CI helpers,
+and the online installer itself are not part of the installed runtime. Changes
+that add a runtime directory must update this explicit payload and its tests.
+
 ```bash
 # Clone the repository
 git clone https://github.com/zjlgdx/xray.git

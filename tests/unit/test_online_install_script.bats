@@ -14,9 +14,6 @@ teardown() {
 @test "install.sh - parse_args accepts --yes" {
   run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
-    TMP_DIR="$(mktemp -d)"
-    trap '"'"'rm -rf "${TMP_DIR}"'"'"' EXIT
-    source_args_module
     parse_args --yes
     printf "%s" "${XRF_YES}"
   '
@@ -34,10 +31,7 @@ teardown() {
 @test "online install help exports required SNI before the sudo pipeline" {
   run bash -c '
     source "$1/install.sh"
-    TMP_DIR="$(mktemp -d)"
-    trap '\''rm -rf "${TMP_DIR}"'\'' EXIT
-    source_args_module
-    args::show_help
+    show_help
   ' _ "${PROJECT_ROOT}"
   [ "${status}" -eq 0 ]
   [[ "${output}" == *'export XRAY_SNI='* ]]
@@ -279,4 +273,41 @@ EOF
   [ -f "${workdir}/install/bin/xrf" ]
   [ "$(cat "${workdir}/install/credentials")" = 'existing-credential' ]
   [ ! -e "${workdir}/install/.install_in_progress" ]
+}
+
+@test "online help works without a writable temporary directory" {
+  run bash -c '
+    mktemp() { return 1; }
+    export -f mktemp
+    bash "$1/install.sh" --help
+  ' _ "${PROJECT_ROOT}"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"xray-fusion online installer"* ]]
+  [[ "$output" == *"--install-dir"* ]]
+}
+
+@test "online install copies only runtime files and keeps installed commands usable" {
+  local workdir="${TEST_TMPDIR}/runtime-payload"
+  mkdir -p "${workdir}/downloaded"
+  ln -s "${PROJECT_ROOT}" "${workdir}/downloaded/xray-fusion"
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/downloaded"
+    INSTALL_DIR="$2/installed"
+    SYMLINK_PATH="$2/xrf"
+    install_xray_fusion
+    "$INSTALL_DIR/bin/xrf" help
+    "$INSTALL_DIR/bin/xrf" install --help
+    "$INSTALL_DIR/bin/xrf" check --help
+    "$INSTALL_DIR/bin/xrf" backup --help
+    bash "$INSTALL_DIR/uninstall.sh" --help
+    test -f "$INSTALL_DIR/packaging/systemd/xray.service"
+    test -f "$INSTALL_DIR/LICENSE"
+    test ! -e "$INSTALL_DIR/tests"
+    test ! -e "$INSTALL_DIR/docs"
+    test ! -e "$INSTALL_DIR/scripts"
+    test ! -e "$INSTALL_DIR/Makefile"
+    test ! -e "$INSTALL_DIR/install.sh"
+  ' _ "${PROJECT_ROOT}" "${workdir}"
+  [ "$status" -eq 0 ]
 }
