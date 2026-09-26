@@ -1,11 +1,11 @@
 SHELL := /usr/bin/env bash
 # Source files for linting (includes .bats for shellcheck)
 # ShellCheck can handle bats files - see tests/.shellcheckrc for bats-specific config
-SRC_LINT := $(shell git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'plugins/**/*.sh' 'scripts/**/*.sh' 'tests/**/*.sh' 'tests/**/*.bats' 2>/dev/null)
+SRC_LINT := $(shell git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'scripts/**/*.sh' 'tests/**/*.sh' 'tests/**/*.bats' 2>/dev/null)
 
 # Source files for formatting (excludes .bats - shfmt doesn't support @test syntax)
 # See: https://github.com/mvdan/sh/issues/291
-SRC_FMT  := $(shell git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'plugins/**/*.sh' 'scripts/**/*.sh' 'tests/**/*.sh' 2>/dev/null)
+SRC_FMT  := $(shell git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'scripts/**/*.sh' 'tests/**/*.sh' 2>/dev/null)
 COVERAGE_DIR ?= artifacts/coverage
 
 .PHONY: lint fmt test check-bats-runtime test-unit test-integration coverage-check-tools coverage-unit-real coverage-integration-real coverage-real

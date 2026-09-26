@@ -7,44 +7,11 @@ setup() {
   setup_test_env
   # Source the UUID module (test_helper doesn't include it)
   source "${PROJECT_ROOT}/lib/uuid.sh"
+  source "${PROJECT_ROOT}/lib/validators.sh"
 }
 
 teardown() {
   cleanup_test_env
-}
-
-# ==============================================================================
-# uuid::validate Tests
-# ==============================================================================
-
-@test "uuid::validate - valid UUID format" {
-  run uuid::validate "6ba85179-d64e-4cb8-901f-bfb8e9e7d5f1"
-  [ "$status" -eq 0 ]
-}
-
-@test "uuid::validate - valid UUID with uppercase" {
-  run uuid::validate "6BA85179-D64E-4CB8-901F-BFB8E9E7D5F1"
-  [ "$status" -eq 0 ]
-}
-
-@test "uuid::validate - invalid UUID (too short)" {
-  run uuid::validate "6ba85179-d64e-4cb8-901f"
-  [ "$status" -ne 0 ]
-}
-
-@test "uuid::validate - invalid UUID (no hyphens)" {
-  run uuid::validate "6ba85179d64e4cb8901fbfb8e9e7d5f1"
-  [ "$status" -ne 0 ]
-}
-
-@test "uuid::validate - invalid UUID (wrong format)" {
-  run uuid::validate "not-a-uuid"
-  [ "$status" -ne 0 ]
-}
-
-@test "uuid::validate - empty string" {
-  run uuid::validate ""
-  [ "$status" -ne 0 ]
 }
 
 # ==============================================================================
@@ -61,7 +28,7 @@ teardown() {
   [ "$status" -eq 0 ]
 
   # Validate generated UUID format
-  run uuid::validate "${output}"
+  run validators::uuid "${output}"
   [ "$status" -eq 0 ]
 }
 
@@ -192,7 +159,7 @@ EOF
   # Generate 5 UUIDs and validate all
   for i in {1..5}; do
     uuid=$(uuid::generate "")
-    run uuid::validate "${uuid}"
+    run validators::uuid "${uuid}"
     [ "$status" -eq 0 ]
   done
 }

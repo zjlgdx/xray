@@ -1,20 +1,10 @@
 # Error Codes Reference
 
-Xray-Fusion has numeric exit statuses in `lib/errors.sh` and structured `XRF-CATEGORY-NUMBER` messages in `lib/error_codes.sh`. A command may also log a direct error without a structured code. Read the actual message and exit status before choosing a recovery action.
-
-| Structured code | Defined meaning | Next check |
-| --- | --- | --- |
-| XRF-CONFIG-003 | Required parameter missing | Supply the named current option or required environment input. Fresh install requires `XRAY_SNI`. |
-| XRF-CONFIG-004 | Invalid UUID format | Omit `--uuid` for generation or pass an RFC 4122 UUID. |
-| XRF-NETWORK-001 | Port conflict | Check the configured listen port with `sudo ss -ltnp`. |
-| XRF-XRAY-001 | Xray config test failed | Run the Xray `-test` command against the active managed confdir. |
-| XRF-SYSTEM-001 | Required command missing | Install the named dependency and retry. |
-
-These are helper-defined codes, not a promise that every failure uses one. Removed topology, certificate and plugin paths have no current error-code contract. Unknown CLI options fail instead of being translated to retired modes.
+Commands report errors through `core::log` and numeric exit statuses. Read the message and exit status together; there is no separate structured error-code API. Unknown CLI options fail instead of being translated to retired modes.
 
 ## Exit statuses
 
-`lib/errors.sh` defines general, invalid-argument, not-found, permission, configuration, network and timeout errors; validation errors for port, UUID, shortId and version; service start/stop/not-found errors; and file read/write/directory errors. Individual commands may use a narrower set. `xrf help` and command-specific `--help` describe supported options.
+`lib/errors.sh` defines `ERR_INVALID_ARG=2`, used by managed configuration input validation. Commands also return ordinary shell success/failure statuses; no universal numeric taxonomy is promised. `xrf help` and command-specific `--help` describe supported options.
 
 ## Practical diagnosis
 

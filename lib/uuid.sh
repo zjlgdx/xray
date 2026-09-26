@@ -111,32 +111,3 @@ uuid::from_string() {
   echo "${uuid}"
   return 0
 }
-
-##
-# Validate UUID format
-#
-# Checks if a string is a valid UUID (RFC 4122 format).
-# Format: 8-4-4-4-12 hexadecimal digits (with hyphens).
-#
-# Arguments:
-#   $1 - UUID string to validate (required)
-#
-# Returns:
-#   0 - Valid UUID format
-#   1 - Invalid UUID format
-#
-# Example:
-#   uuid::validate "6ba85179-d64e-4cb8-901f-bfb8e9e7d5f1"  # Returns 0
-#   uuid::validate "invalid-uuid"                           # Returns 1
-##
-uuid::validate() {
-  local uuid="${1:-}"
-
-  # RFC 4122 UUID format: 8-4-4-4-12 hexadecimal digits
-  # Example: 6ba85179-d64e-4cb8-901f-bfb8e9e7d5f1
-  if [[ "${uuid}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-    return 0
-  fi
-
-  return 1
-}

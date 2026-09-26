@@ -105,9 +105,6 @@ EOF
   grep -q "^check_dependencies()" install.sh
 }
 
-@test "install.sh - defines retry_command function" {
-  grep -q "^retry_command()" install.sh
-}
 
 # =============================================================================
 # Dependency Checking Tests
