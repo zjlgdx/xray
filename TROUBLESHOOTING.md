@@ -289,18 +289,12 @@ xray version
 
 **Solution**:
 
-1. **Upgrade to latest version** (v25.10.15+):
-   ```bash
-   # Download latest release
-   curl -L https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o xray.zip
-
-   # Extract and install
-   unzip xray.zip
-   sudo install -m 755 xray /usr/local/bin/
-
-   # Verify upgrade
-   xray version
-   ```
+1. **Upgrade the client to a current published Xray release**: choose the newest
+   published tag from the [official releases list](https://github.com/XTLS/Xray-core/releases),
+   which can include prereleases. Download the archive and `.dgst` checksum for
+   your platform, verify them, and follow your client's update procedure. For a
+   server managed by xray-fusion, `sudo xrf upgrade --version latest` uses the
+   newest published, non-draft release.
 
 2. **Verify client configuration**:
    - Ensure UUID matches server configuration
@@ -320,7 +314,7 @@ xray version
 | v1.8.0 - v25.9.4 | ✅ Supported |
 | < v1.8.0 | ❌ Not supported |
 
-**Official Downloads**: https://github.com/XTLS/Xray-core/releases/latest
+**Official Downloads**: https://github.com/XTLS/Xray-core/releases
 
 **Related**: v25.10.15 Release Notes, ADR-011
 

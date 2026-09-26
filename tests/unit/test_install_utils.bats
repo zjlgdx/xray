@@ -268,50 +268,115 @@ SHA256 (file2.zip) = 11111111111111111111111111111111111111111111111111111111111
   [ "$status" -eq 0 ]
 }
 
-# Test: latest release tag parsing helpers
-@test "xray::extract_latest_tag_from_release_json - extracts valid tag_name" {
-  local payload='{"tag_name":"v26.2.6","name":"Xray-core v26.2.6"}'
+# Test: latest published release tag parsing helpers
+@test "xray::extract_latest_tag_from_release_json - selects newest published release including prerelease" {
+  local payload='[{"tag_name":"v26.3.27","draft":false,"prerelease":false,"published_at":"2026-03-27T00:00:00Z"},{"tag_name":"v26.9.9","draft":false,"prerelease":true,"published_at":"2026-09-08T22:28:10Z"},{"tag_name":"v26.7.28","draft":false,"prerelease":true,"published_at":"2026-07-28T08:00:45Z"}]'
 
   run xray::extract_latest_tag_from_release_json "${payload}"
   [ "$status" -eq 0 ]
-  [[ "$output" == "v26.2.6" ]]
+  [ "$output" = "v26.9.9" ]
 }
 
-@test "xray::extract_latest_tag_from_release_json - normalizes missing v prefix" {
-  local payload='{"tag_name":"26.2.6"}'
+@test "xray::extract_latest_tag_from_release_json - sorts by publication time, not API order or version" {
+  local payload='[{"tag_name":"v99.1.0","draft":false,"published_at":"2026-01-01T00:00:00Z"},{"tag_name":"v1.2.3","draft":false,"published_at":"2026-09-09T00:00:00Z"}]'
 
   run xray::extract_latest_tag_from_release_json "${payload}"
   [ "$status" -eq 0 ]
-  [[ "$output" == "v26.2.6" ]]
+  [ "$output" = "v1.2.3" ]
 }
 
-@test "xray::extract_latest_tag_from_release_json - returns empty for invalid tag" {
-  local payload='{"tag_name":"nightly-latest"}'
+@test "xray::extract_latest_tag_from_release_json - ignores drafts and older noncanonical tags" {
+  local payload='[{"tag_name":"v99.0.0","draft":true,"published_at":"2026-12-01T00:00:00Z"},{"tag_name":"99.0.0","draft":false,"published_at":"2026-01-01T00:00:00Z"},{"tag_name":"nightly","draft":false,"published_at":"2026-02-01T00:00:00Z"},{"tag_name":"v26.9.9","draft":true,"published_at":null},{"tag_name":"v26.8.1","draft":false,"published_at":"2026-08-01T00:00:00Z"}]'
 
   run xray::extract_latest_tag_from_release_json "${payload}"
   [ "$status" -eq 0 ]
-  [[ -z "$output" ]]
+  [ "$output" = "v26.8.1" ]
 }
 
-@test "xray::resolve_latest_tag - returns parsed tag from API payload" {
+@test "xray::extract_latest_tag_from_release_json - refuses newer invalid tag instead of old version" {
+  local payload='[{"tag_name":"v26.9.9-beta","draft":false,"published_at":"2026-09-09T00:00:00Z"},{"tag_name":"v26.3.27","draft":false,"published_at":"2026-03-27T00:00:00Z"}]'
+
+  run xray::extract_latest_tag_from_release_json "${payload}"
+  [ "$status" -ne 0 ]
+  [ -z "$output" ]
+}
+
+@test "xray::extract_latest_tag_from_release_json - refuses malformed publication time instead of old version" {
+  local payload
+  for payload in \
+    '[{"tag_name":"v26.9.9","draft":false,"published_at":null},{"tag_name":"v26.3.27","draft":false,"published_at":"2026-03-27T00:00:00Z"}]' \
+    '[{"tag_name":"v26.9.9","draft":false,"published_at":"tomorrow"},{"tag_name":"v26.3.27","draft":false,"published_at":"2026-03-27T00:00:00Z"}]'; do
+    run xray::extract_latest_tag_from_release_json "${payload}"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+  done
+}
+
+@test "xray::extract_latest_tag_from_release_json - fails closed on empty or invalid API result" {
+  local payload
+  for payload in '[]' '{}' '{bad json' '[{"tag_name":"v26.9.9","draft":true,"published_at":"2026-09-08T22:28:10Z"}]' '[{"tag_name":"v26.9.9","draft":false,"published_at":"tomorrow"}]'; do
+    run xray::extract_latest_tag_from_release_json "${payload}"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+  done
+}
+
+@test "xray::resolve_latest_tag - requests release list and selects published prerelease" {
+  export API_REQUEST_FILE="${TEST_TMPDIR}/requested-url"
   core::retry() {
-    printf '%s' '{"tag_name":"v26.2.6"}'
+    printf '%s' "$*" > "${API_REQUEST_FILE}"
+    printf '%s' '[{"tag_name":"v26.3.27","draft":false,"published_at":"2026-03-27T00:00:00Z"},{"tag_name":"v26.9.9","draft":false,"prerelease":true,"published_at":"2026-09-08T22:28:10Z"}]'
   }
 
   run xray::resolve_latest_tag
   [ "$status" -eq 0 ]
-  [[ "$output" == "v26.2.6" ]]
-
+  [ "$output" = "v26.9.9" ]
+  grep -Fq 'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=100' "${API_REQUEST_FILE}"
+  run grep -q '/releases/latest' "${API_REQUEST_FILE}"
+  [ "$status" -ne 0 ]
   unset -f core::retry
 }
 
-@test "xray::resolve_latest_tag - fails on malformed API payload" {
+@test "xray::resolve_latest_tag - fails when API is unavailable or has no usable release" {
+  core::retry() { return 22; }
+  run xray::resolve_latest_tag
+  [ "$status" -ne 0 ]
+
+  core::retry() { printf '%s' '[]'; }
+  run xray::resolve_latest_tag
+  [ "$status" -ne 0 ]
+  unset -f core::retry
+}
+
+@test "xray::resolve_latest_tag - searches later pages by publication time" {
+  local first_page
+  first_page="$(jq -n '[range(0;100) | {tag_name:"v26.9.8",draft:false,published_at:"2026-09-08T09:49:08Z"}]')"
   core::retry() {
-    printf '%s' '{"tag_name":"not-a-version"}'
+    case "$*" in
+      *'page=1') printf '%s' "${first_page}" ;;
+      *'page=2') printf '%s' '[{"tag_name":"v26.9.9","draft":false,"prerelease":true,"published_at":"2026-09-08T22:28:10Z"}]' ;;
+      *) return 1 ;;
+    esac
   }
 
   run xray::resolve_latest_tag
-  [ "$status" -eq 1 ]
+  [ "$status" -eq 0 ]
+  [ "$output" = v26.9.9 ]
+  unset -f core::retry
+}
 
+@test "xray::resolve_latest_tag - fails closed if a later page fails or repeats" {
+  local first_page
+  first_page="$(jq -n '[range(0;100) | {tag_name:"v26.9.8",draft:false,published_at:"2026-09-08T09:49:08Z"}]')"
+  core::retry() {
+    [[ "$*" != *'page=2' ]] || return 22
+    printf '%s' "${first_page}"
+  }
+  run xray::resolve_latest_tag
+  [ "$status" -ne 0 ]
+
+  core::retry() { printf '%s' "${first_page}"; }
+  run xray::resolve_latest_tag
+  [ "$status" -ne 0 ]
   unset -f core::retry
 }

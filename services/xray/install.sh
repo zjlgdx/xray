@@ -36,7 +36,7 @@ xray::install() {
 
   if [[ "${version}" == "latest" ]]; then
     if ! version="$(xray::resolve_latest_tag)"; then
-      core::log error "resolve latest failed" '{"api":"https://api.github.com/repos/XTLS/Xray-core/releases/latest"}'
+      core::log error "resolve latest failed" '{"api":"https://api.github.com/repos/XTLS/Xray-core/releases"}'
       return 1
     fi
   fi

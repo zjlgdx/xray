@@ -71,10 +71,10 @@ MIT
 
 ## Upgrading an existing server
 
-Use `sudo xrf upgrade --version vX.Y.Z` for an explicit release, including a
-prerelease you have chosen to test. `--version latest` follows GitHub's latest
-**non-prerelease**, not the newest chronological tag. There is no automatic
-upgrade or implicit prerelease selection.
+Use `sudo xrf upgrade --version vX.Y.Z` for an explicit release. `--version latest`
+selects the newest published, non-draft GitHub release by publication time,
+including prereleases. The same rule applies to a fresh install and the lifecycle
+smoke test when no version is specified. There is no automatic upgrade.
 
 The command holds the configuration lock, backs up the binary, active configuration
 and state under `/var/lib/xray-fusion/upgrades/`, downloads and verifies the candidate,

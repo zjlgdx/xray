@@ -2,6 +2,7 @@
 set -eEuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "${ROOT_DIR}/services/xray/install_utils.sh"
 CONTAINER_NAME="xrf-smoke-$(date +%s)"
 CURRENT_SCENARIO="setup"
 DEFAULT_BASE_IMAGE="${XRF_SMOKE_BASE_IMAGE:-ubuntu:24.04}"
@@ -78,14 +79,8 @@ resolve_smoke_xray_version() {
     return 1
   fi
 
-  SMOKE_XRAY_VERSION="$(
-    curl -fsSL -o /dev/null -w '%{url_effective}' \
-      https://github.com/XTLS/Xray-core/releases/latest
-  )"
-  SMOKE_XRAY_VERSION="${SMOKE_XRAY_VERSION##*/}"
-
-  if [[ ! "${SMOKE_XRAY_VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    log "failed to resolve a stable Xray release tag"
+  if ! SMOKE_XRAY_VERSION="$(xray::resolve_latest_tag)"; then
+    log "failed to resolve the newest published Xray release tag"
     return 1
   fi
 }

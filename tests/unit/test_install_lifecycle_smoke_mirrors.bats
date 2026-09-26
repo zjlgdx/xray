@@ -51,6 +51,14 @@ has_online_pipefail_guard() {
   [ "${status}" -eq 0 ]
 }
 
+@test "install lifecycle smoke resolves through the shared releases-list helper" {
+  local script="${PROJECT_ROOT}/scripts/e2e/install-lifecycle-smoke.sh"
+  grep -Fq 'services/xray/install_utils.sh' "${script}"
+  grep -Fq 'xray::resolve_latest_tag' "${script}"
+  run grep -Fq '/releases/latest' "${script}"
+  [ "$status" -ne 0 ]
+}
+
 @test "install lifecycle smoke online curl pipelines enable pipefail" {
   run has_online_pipefail_guard
 

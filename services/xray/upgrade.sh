@@ -118,7 +118,7 @@ main() {
         ;;
       --debug | --json) shift ;;
       --help)
-        printf '%s\n' 'Usage: xrf upgrade --version <vX.Y.Z|latest> (latest selects a non-prerelease)'
+        printf '%s\n' 'Usage: xrf upgrade --version <vX.Y.Z|latest> (latest includes prereleases)'
         return 0
         ;;
       *)
@@ -128,7 +128,7 @@ main() {
     esac
   done
   if [[ "${version}" != latest && ! "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    core::log error "specify --version vX.Y.Z or --version latest (stable)" '{}'
+    core::log error "specify --version vX.Y.Z or --version latest (includes prereleases)" '{}'
     return 2
   fi
   core::with_flock "$(state::lock)" xray::upgrade "${version}"

@@ -117,6 +117,12 @@ teardown() { cleanup_test_env; }
   [ ! -d "${XRF_VAR}/upgrades" ]
 }
 
+@test "upgrade help says latest includes prereleases" {
+  run "${PROJECT_ROOT}/services/xray/upgrade.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'latest includes prereleases'* ]]
+}
+
 @test "install refuses to regenerate credentials for an existing installation" {
   run "${PROJECT_ROOT}/commands/install.sh" --yes
   [ "$status" -ne 0 ]
