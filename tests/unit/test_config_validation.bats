@@ -191,3 +191,18 @@ JSON
     [ "$status" -eq 0 ]
   done
 }
+
+@test "config validation - independent layers follow active symlink and reject broken target" {
+  local confdir="${TEST_TMPDIR}/releases/current" active="${TEST_TMPDIR}/active" validator
+  make_valid_confdir "${confdir}"
+  ln -s 'releases/current' "${active}"
+  for validator in config::validate_json_syntax config::validate_schema config::validate_business_rules; do
+    run "${validator}" "${active}"
+    [ "$status" -eq 0 ]
+  done
+  rm "${active}"
+  ln -s 'releases/missing' "${active}"
+  run config::validate_deep "${active}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"configuration directory not found"* ]]
+}

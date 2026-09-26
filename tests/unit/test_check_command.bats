@@ -122,3 +122,19 @@ JSON
   run "${PROJECT_ROOT}/commands/check.sh" --deep --confdir "${XRF_ETC}/xray/active"
   [ "$status" -eq 0 ]
 }
+
+@test "check command --deep follows the installed active symlink" {
+  local release="${XRF_ETC}/xray/releases/release with spaces"
+  mkdir -p "${XRF_ETC}/xray/releases"
+  mv "${XRF_ETC}/xray/active" "${release}"
+  ln -s 'releases/release with spaces' "${XRF_ETC}/xray/active"
+  # Use the real CLI and its default confdir, as on an installed host.
+  run "${PROJECT_ROOT}/bin/xrf" check --deep
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"configuration validation passed"* ]]
+
+  printf '{bad-json\n' > "${release}/06_outbounds.json"
+  run "${PROJECT_ROOT}/bin/xrf" check --deep
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"invalid json syntax"* ]]
+}

@@ -74,3 +74,19 @@ installation refusal, uninstall/reinstall, and failure cleanup.
 The CI workflow no longer runs the heuristic hardcoded-secret grep: it matched
 shell variable references and only emitted a warning. The existing ShellCheck
 lint gate and JSON report remain; neither is a dedicated secret scanner.
+
+### Installed configuration diagnostics
+
+- `unit/test_check_command.bats` exercises `xrf check --deep` through the real CLI
+  with its default `active` symlink (including a relative target with spaces),
+  then verifies invalid JSON is still rejected. The Xray binary is mocked here;
+  real systemd/Xray checks are separate runtime evidence.
+- `unit/test_config_validation.bats` verifies standalone layers follow the active
+  directory link and reject a dangling link.
+- `unit/test_health_check.bats` distinguishes JSON fields from unrelated strings:
+  port 443 with loglevel `warning` stays compatible, non-443 REALITY inbounds
+  warn with loglevel `error`, deprecated keys and all five configured Apple/iCloud
+  destination families still warn (with hostname boundaries, case folding, and
+  both target/dest fields),
+  and malformed JSON is not reported as compatible. Binary log parsing remains
+  covered separately by `unit/test_xray_paths.bats`.

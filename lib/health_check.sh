@@ -205,9 +205,33 @@ health::check_compatibility() {
     return 1
   fi
 
-  local combined warnings
-  combined="$(cat "${config_dir}"/*.json 2> /dev/null || true)"
-  warnings="$(xray::extract_compat_warnings "${combined}")"
+  # Configuration is structured data, not Xray diagnostic text. In particular,
+  # loglevel "warning" must not turn a normal REALITY port 443 into a warning.
+  local warnings
+  if ! warnings="$(jq -sr '
+    [ .[] | .. | objects ] as $objects |
+    [ .[] | .inbounds[]? | select(.streamSettings.security? == "reality") ] as $reality |
+    [
+      (if any($objects[]; has("allowInsecure")) then
+        "deprecated TLS option allowInsecure detected; migrate to pinnedPeerCertSha256 + verifyPeerCertByName"
+      else empty end),
+      (if any($objects[]; has("verifyPeerCertInNames") or has("serverNameToVerify")) then
+        "deprecated TLS option verifyPeerCertInNames or serverNameToVerify detected; use verifyPeerCertByName"
+      else empty end),
+      (if any($reality[]; .port != null and (.port | tostring) != "443") then
+        "REALITY inbound uses a non-443 port; port 443 is recommended"
+      else empty end),
+      (if any($reality[];
+        (.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // "") |
+        tostring | ascii_downcase | test("(^|\\.)(apple|icloud|cdn-apple|icloud-content|mzstatic)\\.com(:[0-9]+)?$")
+      ) then
+        "Apple/iCloud REALITY destinations may cause IP blocking; choose a different target"
+      else empty end)
+    ] | .[]
+  ' "${config_dir}"/*.json)"; then
+    core::log warn "failed to parse configuration for compatibility check" '{}'
+    return 1
+  fi
   if [[ -z "${warnings}" ]]; then
     return 0
   fi
