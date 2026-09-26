@@ -140,7 +140,7 @@ if [[ "${count}" -lt 2 ]]; then
 fi
 printf "{\"sha\": \"1234567890abcdef1234567890abcdef12345678\"}"
 EOF
-    sed -i "s|__COUNT_FILE__|${CALL_COUNT_FILE}|" "${mockbin}/curl"
+    sed -i.bak "s|__COUNT_FILE__|${CALL_COUNT_FILE}|" "${mockbin}/curl"
     chmod +x "${mockbin}/curl"
 
     cat > "${mockbin}/git" <<'"'"'EOF'"'"'

@@ -5,7 +5,7 @@
 ```bash
 --topology reality-only|vision-reality  # Deployment mode (required)
 --domain <domain>                       # Domain (required for vision-reality)
---version <version>                     # Xray version (default: latest stable)
+--version <version>                     # Xray version (default: newest published release)
 --plugins <plugin1,plugin2>             # Comma-separated plugin list
 --template <template-id>                # Use predefined template
 --uuid <uuid>                           # Custom UUID
@@ -17,9 +17,10 @@
 
 ## Version Policy
 
-- Default `--version latest` tracks **stable release only** (`GitHub releases/latest`).
-- Current stable baseline: **v26.2.6** (released 2026-02-06).
-- Pre-release builds are not auto-tracked; use explicit `--version` when needed.
+- Default `--version latest` selects the newest published, non-draft GitHub
+  release by publication time, including prereleases.
+- Use an explicit `--version vX.Y.Z` to pin a release. If GitHub's releases API
+  fails, the installer fails instead of selecting an older stable release.
 
 ## Templates
 
@@ -112,13 +113,9 @@ CADDY_HTTPS_PORT=8444                         # Caddy HTTPS
 
 ## Client Requirements
 
-**Recommended**: Xray-core **v26.2.6 or later**.
-
-| Version | Status |
-|---------|--------|
-| v26.2.6+ | ✅ Recommended |
-| v26.0.0 - v26.2.5 | ✅ Supported |
-| < v26.0.0 | ⚠️ Compatibility not guaranteed |
+Use a current Xray-core client compatible with the server's configured protocol.
+Check the [official releases list](https://github.com/XTLS/Xray-core/releases)
+and verify interoperability after upgrading either endpoint.
 
 ## Development
 

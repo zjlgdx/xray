@@ -8,6 +8,7 @@ usage() {
 xrf — Xray Fusion Lite (complete clean)
 Usage: xrf <command>
   install     Install Xray & deploy confdir (atomic, flock-protected)
+  upgrade     Upgrade only the core, preserving config (requires --version)
   status      Show version & active confdir
   uninstall   Remove Xray (keep state)
   links       Print client links
@@ -27,6 +28,7 @@ shift || true
 
 case "${cmd}" in
   install) "${HERE}/commands/install.sh" "$@" ;;
+  upgrade) "${HERE}/services/xray/upgrade.sh" "$@" ;;
   status) "${HERE}/commands/status.sh" "$@" ;;
   uninstall) "${HERE}/commands/uninstall.sh" "$@" ;;
   links) "${HERE}/services/xray/client-links.sh" "$@" ;;

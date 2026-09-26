@@ -164,11 +164,11 @@ EOF
   grep -q "set -euo pipefail" install.sh
 }
 
-@test "online wrapper lifecycle covers install reinstall uninstall and reinstall-after-uninstall" {
+@test "online wrapper rejects repeat install and permits reinstall after tool removal" {
   setup_wrapper_env
   create_fake_online_project
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
 
@@ -186,10 +186,15 @@ EOF
     install_xray_fusion
     run_xray_install
 
-    install_xray_fusion
-    run_xray_install
+    if install_xray_fusion; then
+      exit 42
+    fi
+    test -f "${INSTALL_DIR}/.installed"
+    test -L "${SYMLINK_PATH}"
 
     run_xrf_uninstall
+    rm -f "${SYMLINK_PATH}"
+    rm -rf "${INSTALL_DIR}"
 
     install_xray_fusion
     run_xray_install
@@ -197,7 +202,7 @@ EOF
 
   [ "${status}" -eq 0 ]
   [ -f "${TEST_TMPDIR}/online-install/.installed" ]
-  [ "$(grep -c '^install|' "${XRF_FAKE_CALLS_FILE}")" -eq 3 ]
+  [ "$(grep -c '^install|' "${XRF_FAKE_CALLS_FILE}")" -eq 2 ]
   [ "$(grep -c '^uninstall$' "${XRF_FAKE_CALLS_FILE}")" -eq 1 ]
 }
 
@@ -206,7 +211,7 @@ EOF
   create_fake_online_project
   export XRF_FAKE_FAIL_ON_INSTALL="1"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
 
     TMP_DIR="'"${TEST_TMPDIR}"'/downloaded"

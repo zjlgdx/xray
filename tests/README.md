@@ -246,3 +246,14 @@ bats tests/unit/test_args_validation.bats --filter "accepts valid domain"
 # Stop on failure
 bats --no-parallelize-across-files tests/unit/*.bats
 ```
+
+### Upgrade/deployment regression coverage
+
+- `unit/test_upgrade.bats`: production upgrade transaction with isolated candidate and
+  service doubles; validates preservation, version selection, download/config failures,
+  restart/process verification failures, metadata rollback, and fresh-install guard.
+- `unit/test_deploy_transaction.bats`: production renderer/deployer; checks log preservation,
+  explicit overrides, binary-aware restarts, validation failures and configuration rollback.
+
+These tests never operate the host service or contact a VPS. They do not establish
+Shadowrocket compatibility or external network reliability.

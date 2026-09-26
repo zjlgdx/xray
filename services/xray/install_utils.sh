@@ -119,50 +119,41 @@ xray::verify_file_checksum() {
 }
 
 ##
-# Extract latest release tag from GitHub release API JSON payload.
+# Select the most recently published non-draft release from GitHub's release list.
 #
 # Arguments:
 #   $1 - JSON payload content (string, required)
 #
 # Output:
-#   Normalized release tag (vX.Y.Z) or empty string if unavailable/invalid
+#   Release tag (vX.Y.Z)
 #
 # Returns:
-#   0 - Always succeeds
+#   0 - A published release with a canonical tag was found
+#   1 - Invalid response or no usable release
 ##
 xray::extract_latest_tag_from_release_json() {
-  local payload="${1:-}" tag=""
-  [[ -z "${payload}" ]] && return 0
-
-  # Prefer jq when available.
-  if command -v jq > /dev/null 2>&1; then
-    tag="$(printf '%s' "${payload}" | jq -r '.tag_name // empty' 2> /dev/null || true)"
-  fi
-
-  # Fallback parser for environments without jq.
-  if [[ -z "${tag}" ]]; then
-    tag="$(
-      printf '%s' "${payload}" \
-        | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' \
-        | head -1 \
-        | sed -E 's/.*"([^"]+)"/\1/'
-    )"
-  fi
-
-  if [[ ! "${tag}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    printf ''
-    return 0
-  fi
-  [[ "${tag}" =~ ^v ]] || tag="v${tag}"
-  printf '%s' "${tag}"
-  return 0
+  local payload="${1:-}"
+  [[ -n "${payload}" ]] || return 1
+  printf '%s' "${payload}" | jq -er '
+    if type != "array" then empty else
+      [ .[]
+        | if .draft == true then empty
+          elif .draft == false then
+            {tag: .tag_name, published: (.published_at | fromdateiso8601)}
+          else error("invalid release draft field") end
+      ]
+      | if length == 0 then empty else max_by(.published).tag end
+      | if type == "string" and test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")
+        then . else error("invalid newest release tag") end
+    end
+  ' 2> /dev/null
 }
 
 ##
-# Resolve latest stable release tag from GitHub API.
+# Resolve the most recently published non-draft release, including prereleases.
 #
 # Arguments:
-#   $1 - Optional API URL (string, optional)
+#   $1 - Optional releases API base URL (string, optional)
 #
 # Output:
 #   Release tag (vX.Y.Z)
@@ -172,17 +163,31 @@ xray::extract_latest_tag_from_release_json() {
 #   1 - Failed to fetch/parse latest tag
 ##
 xray::resolve_latest_tag() {
-  local api_url="${1:-https://api.github.com/repos/XTLS/Xray-core/releases/latest}"
-  local payload tag
+  local api_url="${1:-https://api.github.com/repos/XTLS/Xray-core/releases}"
+  local payload previous_page="" tag count page=1
+  local pages=()
 
-  if declare -f core::retry > /dev/null 2>&1; then
-    payload="$(core::retry 3 curl -fsSL "${api_url}" 2> /dev/null)" || return 1
-  else
-    payload="$(curl -fsSL "${api_url}" 2> /dev/null)" || return 1
-  fi
+  command -v jq > /dev/null 2>&1 || return 1
 
-  tag="$(xray::extract_latest_tag_from_release_json "${payload}")"
-  [[ -n "${tag}" ]] || return 1
+  # GitHub paginates at 100 releases. Search every page because a release
+  # published today may have been created before the first page's releases.
+  while ((page <= 100)); do
+    if declare -f core::retry > /dev/null 2>&1; then
+      payload="$(core::retry 3 curl -fsSL "${api_url}?per_page=100&page=${page}" 2> /dev/null)" || return 1
+    else
+      payload="$(curl -fsSL "${api_url}?per_page=100&page=${page}" 2> /dev/null)" || return 1
+    fi
+    [[ "${page}" -eq 1 || "${payload}" != "${previous_page}" ]] || return 1
+    count="$(printf '%s' "${payload}" | jq -e 'if type == "array" then length else error("expected release list") end' 2> /dev/null)" || return 1
+    pages+=("${payload}")
+    ((count < 100)) && break
+    previous_page="${payload}"
+    page=$((page + 1))
+  done
+  ((page <= 100)) || return 1
+
+  payload="$(printf '%s\n' "${pages[@]}" | jq -s 'add')" || return 1
+  tag="$(xray::extract_latest_tag_from_release_json "${payload}")" || return 1
   printf '%s' "${tag}"
   return 0
 }

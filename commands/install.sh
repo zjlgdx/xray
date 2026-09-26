@@ -38,8 +38,6 @@ EOF
 
 main() {
   core::init "${@}"
-  plugins::ensure_dirs
-  plugins::load_enabled
 
   # Initialize and parse arguments
   args::init
@@ -53,6 +51,15 @@ main() {
     usage
     exit 1
   fi
+
+  # A state file alone remains after normal uninstall. Any installed artifact
+  # means a fresh install could destroy recoverable configuration or binaries.
+  if [[ -e "$(xray::confbase)" || -L "$(xray::confbase)" || -e "$(xray::bin)" || -L "$(xray::bin)" || -e "${XRF_SYSTEMD_DIR:-/etc/systemd/system}/xray.service" ]]; then
+    core::log error "existing Xray artifacts found; use xrf upgrade for a complete installation or recover partial artifacts first" '{}'
+    return 1
+  fi
+  plugins::ensure_dirs
+  plugins::load_enabled
 
   # Export arguments as environment variables
   args::export_vars
