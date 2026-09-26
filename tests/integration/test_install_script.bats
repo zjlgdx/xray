@@ -41,7 +41,8 @@ EOF
 create_fake_online_project() {
   local project_dir="${TEST_TMPDIR}/downloaded/xray-fusion"
 
-  mkdir -p "${project_dir}/bin"
+  mkdir -p "${project_dir}"/{bin,commands,lib,modules,services,packaging}
+  touch "${project_dir}/LICENSE" "${project_dir}/uninstall.sh"
   cat > "${project_dir}/bin/xrf" << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -76,8 +77,6 @@ EOF
 @test "online wrapper rejects retired topology and plugin flags" {
   run bash -c '
     source "$1/install.sh"
-    TMP_DIR="$(mktemp -d)"
-    source_args_module
     args::parse --topology reality-only
   ' _ "$PROJECT_ROOT"
   [ "$status" -ne 0 ]

@@ -18,6 +18,8 @@ BRANCH="${XRF_BRANCH:-main}"
 INSTALL_DIR="${XRF_INSTALL_DIR:-/usr/local/xray-fusion}"
 
 # Runtime variables (will be set by args::parse)
+# Cleanup owns only a directory created by this invocation.
+TMP_DIR=""
 VERSION=""
 DEBUG=""
 PROXY=""
@@ -188,13 +190,7 @@ check_dependencies() {
   return 0
 }
 
-# Load unified argument parsing (embedded for installation)
-source_args_module() {
-  # Create temporary args module for installation
-  cat > "${TMP_DIR}/args.sh" << 'ARGS_EOF'
-#!/usr/bin/env bash
-# Temporary unified argument parsing for installation
-
+# Standalone argument parsing: available before download or temporary setup.
 # Initialize default values
 args::init() {
   VERSION="latest"
@@ -206,7 +202,7 @@ args::init() {
 args::parse() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --version|-v)
+      --version | -v)
         args::validate_version "${2:-}" || return 1
         VERSION="${2}"
         shift 2
@@ -227,11 +223,11 @@ args::parse() {
         DEBUG="true"
         shift
         ;;
-      --yes|-y)
+      --yes | -y)
         XRF_YES="true"
         shift
         ;;
-      --help|-h)
+      --help | -h)
         return 10
         ;;
       *)
@@ -251,7 +247,7 @@ args::validate_version() {
 }
 
 # Show help
-args::show_help() {
+show_help() {
   cat << EOF
 xray-fusion online installer
 
@@ -277,16 +273,6 @@ Environment:
   XRF_EXPECTED_COMMIT Optional pinned 40-hex commit for download integrity
 EOF
 }
-ARGS_EOF
-
-  source "${TMP_DIR}/args.sh"
-}
-
-# Show help
-show_help() {
-  args::show_help
-}
-
 # Parse command line arguments
 parse_args() {
   args::init
@@ -554,12 +540,11 @@ install_xray_fusion() {
   INSTALL_MARKER="${INSTALL_DIR}/.install_in_progress"
   : > "${INSTALL_MARKER}"
 
-  # Copy files
-  cp -r "${TMP_DIR}/xray-fusion"/* "${INSTALL_DIR}/"
-
-  # Make scripts executable
-  chmod +x "${INSTALL_DIR}/bin/xrf"
-  find "${INSTALL_DIR}" -name "*.sh" -type f -exec chmod +x {} \;
+  # Deploy the runtime payload, not the repository development tree.
+  if ! cp -r "${TMP_DIR}/xray-fusion"/{bin,commands,lib,modules,services,packaging,uninstall.sh,LICENSE} "${INSTALL_DIR}/"; then
+    cleanup_partial_installation
+    return 1
+  fi
 
   # Create symlink for global access
   ln -sf "${INSTALL_DIR}/bin/xrf" "${SYMLINK_PATH}"
@@ -678,10 +663,6 @@ EOF
   echo "                    Xray Fusion - One-Click Installer"
   echo ""
 
-  # Download and setup args module first
-  TMP_DIR="$(mktemp -d)"
-  source_args_module
-
   parse_args "${@}"
 
   if [[ -z "${XRAY_SNI:-}" ]]; then
@@ -722,6 +703,8 @@ EOF
   log_step 6 7 "Downloading xray-fusion"
   log_substep "Repository: ${REPO_URL##*/}"
   log_substep "Branch: ${BRANCH}"
+
+  TMP_DIR="$(mktemp -d)"
 
   # Show spinner during download (skip in debug mode)
   if [[ "${DEBUG}" != "true" ]]; then
