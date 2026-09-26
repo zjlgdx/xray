@@ -541,7 +541,10 @@ install_xray_fusion() {
   : > "${INSTALL_MARKER}"
 
   # Deploy the runtime payload, not the repository development tree.
-  cp -r "${TMP_DIR}/xray-fusion"/{bin,commands,lib,modules,services,packaging,uninstall.sh,LICENSE} "${INSTALL_DIR}/" || return 1
+  if ! cp -r "${TMP_DIR}/xray-fusion"/{bin,commands,lib,modules,services,packaging,uninstall.sh,LICENSE} "${INSTALL_DIR}/"; then
+    cleanup_partial_installation
+    return 1
+  fi
 
   # Create symlink for global access
   ln -sf "${INSTALL_DIR}/bin/xrf" "${SYMLINK_PATH}"

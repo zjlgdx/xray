@@ -327,3 +327,23 @@ EOF
   [ "$status" -ne 0 ]
   [ -f "${caller_tmp}/sentinel" ]
 }
+
+@test "failed runtime payload copy cleans fresh artifacts and permits retry" {
+  local workdir="${TEST_TMPDIR}/copy-failure"
+  mkdir -p "${workdir}/downloaded/xray-fusion"
+  cp -r "${PROJECT_ROOT}"/{bin,commands,lib,modules,services,packaging,uninstall.sh,LICENSE} "${workdir}/downloaded/xray-fusion/"
+  mv "${workdir}/downloaded/xray-fusion/packaging" "${workdir}/packaging"
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/downloaded"
+    INSTALL_DIR="$2/installed"
+    SYMLINK_PATH="$2/xrf"
+    if install_xray_fusion; then exit 1; fi
+    test ! -e "$INSTALL_DIR"
+    test ! -L "$SYMLINK_PATH"
+    mv "$2/packaging" "$TMP_DIR/xray-fusion/packaging"
+    install_xray_fusion
+    "$INSTALL_DIR/bin/xrf" help
+  ' _ "${PROJECT_ROOT}" "${workdir}"
+  [ "$status" -eq 0 ]
+}
