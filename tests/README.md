@@ -40,7 +40,7 @@ Retired plugin, template, dual-topology, Caddy, certificate, firewall, sysctl, a
 
 ## Evidence boundaries
 
-The runtime-payload cleanup on 2026-09-26 recorded 853 unit passes with 16 skips and 32 integration passes with 1 skip on the macOS host. A fresh Ubuntu 24.04 container also passed ShellCheck on the installer and the online-wrapper Bats suite (27 passed, 1 skipped); these wrapper tests use mocked services. The preceding REALITY-only change recorded five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9; those Docker scenarios were not rerun for this cleanup. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
+The runtime-payload cleanup on 2026-09-26 recorded 854 unit passes with 16 skips and 32 integration passes with 1 skip on the macOS host. A fresh Ubuntu 24.04 container also passed ShellCheck on the installer and the online-wrapper Bats suite (28 passed, 1 skipped); these wrapper tests use mocked services. The preceding REALITY-only change recorded five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9; those Docker scenarios were not rerun for this cleanup. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
 
 ## Bats and coverage setup
 

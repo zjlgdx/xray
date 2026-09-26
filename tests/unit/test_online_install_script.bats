@@ -311,3 +311,19 @@ EOF
   ' _ "${PROJECT_ROOT}" "${workdir}"
   [ "$status" -eq 0 ]
 }
+
+@test "online early exits do not clean a caller-owned TMP_DIR" {
+  local caller_tmp="${TEST_TMPDIR}/caller-owned"
+  mkdir -p "${caller_tmp}"
+  printf 'keep\n' > "${caller_tmp}/sentinel"
+  run env TMP_DIR="${caller_tmp}" bash "${PROJECT_ROOT}/install.sh" --help
+  [ "$status" -eq 0 ]
+  [ -f "${caller_tmp}/sentinel" ]
+
+  run env TMP_DIR="${caller_tmp}" bash "${PROJECT_ROOT}/install.sh" --unknown-option
+  [ "$status" -ne 0 ]
+  [ -f "${caller_tmp}/sentinel" ]
+  run env -u XRAY_SNI TMP_DIR="${caller_tmp}" bash "${PROJECT_ROOT}/install.sh"
+  [ "$status" -ne 0 ]
+  [ -f "${caller_tmp}/sentinel" ]
+}

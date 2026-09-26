@@ -18,6 +18,8 @@ BRANCH="${XRF_BRANCH:-main}"
 INSTALL_DIR="${XRF_INSTALL_DIR:-/usr/local/xray-fusion}"
 
 # Runtime variables (will be set by args::parse)
+# Cleanup owns only a directory created by this invocation.
+TMP_DIR=""
 VERSION=""
 DEBUG=""
 PROXY=""
