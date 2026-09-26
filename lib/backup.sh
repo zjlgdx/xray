@@ -846,11 +846,17 @@ backup::_cleanup_old() {
   local backup_dir
   backup_dir="$(backup::dir)"
 
-  # Find all backup files, sorted by modification time (oldest first)
-  local backup_files=()
-  while IFS= read -r file; do
-    backup_files+=("${file}")
-  done < <(find "${backup_dir}" \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -type f 2> /dev/null | sort)
+  # Sort by archive mtime, independent of the user-supplied name prefix.
+  # Bash -ot works on both BSD and GNU hosts without stat format differences.
+  local backup_files=() file i
+  while IFS= read -r -d '' file; do
+    i=${#backup_files[@]}
+    while ((i > 0)) && [[ "${file}" -ot "${backup_files[i - 1]}" ]]; do
+      backup_files[i]="${backup_files[i - 1]}"
+      i=$((i - 1))
+    done
+    backup_files[i]="${file}"
+  done < <(find "${backup_dir}" -maxdepth 1 \( -name "*.tar.gz" -o -name "*.tar.gz.enc" \) -type f -print0 2> /dev/null)
 
   local count="${#backup_files[@]}"
 

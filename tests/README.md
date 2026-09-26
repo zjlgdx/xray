@@ -56,3 +56,21 @@ Online-wrapper tests verify that `--help` needs no temporary directory and that
 the deployed runtime omits development files while retaining runnable commands,
 the systemd unit, and the license. Wrapper lifecycle tests still cover repeat
 installation refusal, uninstall/reinstall, and failure cleanup.
+
+### Backup retention and diagnostic regressions
+
+- `unit/test_backup_edge_cases.bats` checks retention with opposite name/time
+  ordering, fixed archive mtimes, mixed plain/encrypted archives, metadata cleanup,
+  and a backup directory containing spaces. Retention uses archive modification
+  time (oldest first), not the custom name prefix.
+- `unit/test_health_check.bats` runs the real compatibility scanner with multiple
+  deprecated settings and parses the report with `jq -e`; additional warnings
+  exercise quotes, backslashes, and control characters. Service/config/network
+  results are mocked, so these are report tests, not client interoperability tests.
+- `unit/test_config_validation.bats` checks one syntax pass and one merge per deep
+  validation, while standalone schema/business entry points still validate their
+  inputs and propagate failures.
+
+The CI workflow no longer runs the heuristic hardcoded-secret grep: it matched
+shell variable references and only emitted a warning. The existing ShellCheck
+lint gate and JSON report remain; neither is a dedicated secret scanner.

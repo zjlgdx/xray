@@ -80,6 +80,13 @@ config::validate_schema() {
     return 1
   fi
 
+  config::_validate_schema_merged "${merged}"
+}
+
+# Internal layer check over an already parsed and merged configuration.
+config::_validate_schema_merged() {
+  local merged="${1:?merged configuration required}"
+
   if ! jq -e '.inbounds | type == "array"' <<< "${merged}" > /dev/null 2>&1; then
     core::log error "schema validation failed: inbounds must be an array" '{"layer":"schema"}'
     return 1
@@ -123,6 +130,13 @@ config::validate_business_rules() {
     core::log error "failed to merge json configuration" '{"layer":"business-rules"}'
     return 1
   fi
+
+  config::_validate_business_rules_merged "${merged}"
+}
+
+# Internal layer check over an already parsed and merged configuration.
+config::_validate_business_rules_merged() {
+  local merged="${1:?merged configuration required}"
 
   local -A port_seen=()
   local port
@@ -196,7 +210,12 @@ config::validate_deep() {
   local confdir="${1:-}"
   core::log debug "running deep config validation" "$(printf '{"confdir":"%s"}' "${confdir}")"
   config::validate_json_syntax "${confdir}" || return 1
-  config::validate_schema "${confdir}" || return 1
-  config::validate_business_rules "${confdir}" || return 1
+  local merged
+  if ! merged="$(config::_merge "${confdir}")"; then
+    core::log error "failed to merge json configuration" '{"layer":"schema"}'
+    return 1
+  fi
+  config::_validate_schema_merged "${merged}" || return 1
+  config::_validate_business_rules_merged "${merged}" || return 1
   return 0
 }

@@ -390,15 +390,6 @@ jobs:
             printf '[]\n' > shellcheck-report.json
           fi
 
-      - name: Check for hardcoded secrets
-        run: |
-          # Simple pattern matching for common secret patterns
-          ! grep -rE '(password|secret|token|key)\s*=\s*["\047][^"\047]+["\047]' \
-            --include="*.sh" \
-            --exclude-dir=".git" \
-            --exclude-dir="tests" \
-            . || echo "Warning: Potential hardcoded secrets found"
-
       - name: Upload security report
         if: always()
         # actions/upload-artifact@v7.0.0 (pinned to commit SHA for security)
@@ -427,7 +418,7 @@ jobs:
             echo "| Unit Tests | ${{ needs.unit-tests.result }} | 108 tests across 2 Ubuntu versions |"
             echo "| Integration Tests | ${{ needs.integration-tests.result }} | 13/21 runnable tests |"
             echo "| Coverage Summary | ${{ needs.coverage.result }} | unit=${{ needs.coverage.outputs.unit_percent }}% (threshold=${{ needs.coverage.outputs.unit_threshold }}%), integration=${{ needs.coverage.outputs.integration_status }} |"
-            echo "| Security Scan | ${{ needs.security-scan.result }} | ShellCheck + secret detection |"
+            echo "| Security Scan | ${{ needs.security-scan.result }} | ShellCheck report |"
             echo ""
             echo "### 📊 Workflow Details"
             echo "- **Trigger**: ${{ github.event_name }}"

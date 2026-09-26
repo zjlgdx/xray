@@ -252,3 +252,47 @@ JSON
   # Should not crash even if xray -test fails
   [ "$status" -eq 0 ] || [ "$status" -eq 1 ]
 }
+
+@test "health::run - JSON preserves multiple real compatibility warnings" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-active"
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  cat > "${active_dir}/config.json" <<'JSON'
+{"inbounds":[{"streamSettings":{"tlsSettings":{"allowInsecure":true,"verifyPeerCertInNames":["example.com"]}}}]}
+JSON
+  health::check_service() { return 0; }
+  health::check_config() { return 0; }
+  health::check_network() { return 0; }
+  export XRF_JSON=true
+
+  local expected report
+  expected="$(health::check_compatibility)" || true
+  [[ "${expected}" == *$'\n'* ]]
+  # Capture stdout only: diagnostic logs belong to stderr.
+  report="$(health::run)"
+  jq -e --arg expected "${expected}" '
+    .overall == true and
+    .health.service.passed == true and
+    .health.config.passed == true and
+    .health.network.passed == true and
+    .health.compatibility.passed == false and
+    .health.compatibility.message == $expected
+  ' <<< "${report}"
+}
+
+@test "health::run - JSON escapes quotes backslashes and control characters" {
+  health::check_service() { return 1; }
+  health::check_config() { return 0; }
+  health::check_network() { return 0; }
+  local warning=$'warning "quoted" \\path\tvalue\nsecond warning\r'
+  health::check_compatibility() { printf '%s\n' "${warning}"; return 1; }
+  export XRF_JSON=true
+  local report result=0
+  report="$(health::run)" || result=$?
+  [ "${result}" -eq 1 ]
+  jq -e --arg expected "${warning}" '
+    .overall == false and .health.service.passed == false and
+    .health.compatibility.passed == false and
+    .health.compatibility.message == $expected
+  ' <<< "${report}"
+}

@@ -291,22 +291,21 @@ health::run() {
 
   # shellcheck disable=SC2154  # XRF_JSON is set by core::init
   if [[ "${XRF_JSON}" == "true" ]]; then
-    # JSON format
-    local json_output
-    json_output=$(
-      cat << EOF
-{
-  "health": {
-    "service": {"passed": $([ "${service_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${service_msg}"},
-    "config": {"passed": $([ "${config_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${config_msg}"},
-    "network": {"passed": $([ "${network_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${network_msg}"},
-    "compatibility": {"passed": $([ "${compat_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${compat_msg}"}
-  },
-  "overall": $([ "${all_passed}" -eq 1 ] && echo "true" || echo "false")
-}
-EOF
-    )
-    printf '%s\n' "${json_output}"
+    jq -n \
+      --argjson service "${service_ok}" --arg service_msg "${service_msg}" \
+      --argjson config "${config_ok}" --arg config_msg "${config_msg}" \
+      --argjson network "${network_ok}" --arg network_msg "${network_msg}" \
+      --argjson compat "${compat_ok}" --arg compat_msg "${compat_msg}" \
+      --argjson overall "${all_passed}" '
+      {
+        health: {
+          service: {passed: ($service == 1), message: $service_msg},
+          config: {passed: ($config == 1), message: $config_msg},
+          network: {passed: ($network == 1), message: $network_msg},
+          compatibility: {passed: ($compat == 1), message: $compat_msg}
+        },
+        overall: ($overall == 1)
+      }' || return 1
   else
     # Text format
     printf '\nHealth Check Report\n\n'

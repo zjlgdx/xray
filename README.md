@@ -35,7 +35,7 @@ repository. Installer help is available without creating temporary files.
 
 | Command | Description |
 |---------|-------------|
-| `xrf status` | Service status |
+| `xrf status` | Installed Xray version and active configuration path |
 | `xrf links` | Connection links |
 | `xrf logs` | View logs |
 | `xrf health` | Health check |
