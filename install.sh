@@ -142,34 +142,6 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Retry function with exponential backoff
-retry_command() {
-  local max_retries="${1}"
-  local initial_delay="${2}"
-  shift 2
-  local attempt=0
-  local delay="${initial_delay}"
-
-  while [[ ${attempt} -lt ${max_retries} ]]; do
-    attempt=$((attempt + 1))
-    log_debug "Attempt ${attempt}/${max_retries}: $*"
-
-    if "$@"; then
-      log_debug "Command succeeded (attempt ${attempt})"
-      return 0
-    fi
-
-    if [[ ${attempt} -lt ${max_retries} ]]; then
-      log_warn "Command failed, retrying in ${delay}s..."
-      sleep "${delay}"
-      delay=$((delay * 2)) # Exponential backoff
-    fi
-  done
-
-  log_error "Command failed after ${max_retries} retries"
-  return 1
-}
-
 # Check critical dependencies (embedded for early fail-fast)
 check_dependencies() {
   log_info "Checking core dependencies..."

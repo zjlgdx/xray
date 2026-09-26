@@ -267,7 +267,7 @@ EOF
   run_xrf_uninstall || error_exit "Installed xrf uninstall failed; no manual cleanup was attempted"
 
   # Remove only the global link created for this selected installation.
-  cleanup_symlinks
+  cleanup_symlinks /usr/local/bin/xrf
 
   remove_installation_directory
   show_summary

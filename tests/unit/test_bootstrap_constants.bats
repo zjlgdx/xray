@@ -20,7 +20,6 @@ teardown() {
 
     [[ -n "${DEFAULT_XRAY_PORT:-}" ]]
     [[ -n "${DEFAULT_XRAY_FINGERPRINT:-}" ]]
-    [[ -n "${DEFAULT_XRAY_LOG_LEVEL:-}" ]]
     [[ -n "${DEFAULT_VERSION:-}" ]]
   ' _ "${PROJECT_ROOT}"
 
@@ -63,11 +62,6 @@ teardown() {
     esac
 
     case "${DEFAULT_XRF_DEBUG}" in
-      true|false) ;;
-      *) exit 1 ;;
-    esac
-
-    case "${DEFAULT_XRF_JSON}" in
       true|false) ;;
       *) exit 1 ;;
     esac

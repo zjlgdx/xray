@@ -29,7 +29,6 @@ systemd::render_xray_unit() {
     "${HERE}/packaging/systemd/xray.service"
 }
 
-unit_path() { systemd_unit_path; }
 install_unit() {
   core::init "${@}"
   core::log info "installing systemd unit" "{}"

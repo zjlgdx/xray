@@ -489,32 +489,3 @@ teardown() {
   run validators::version "v0.0.0"
   [ "$status" -eq 0 ]
 }
-
-# =============================================================================
-# validators::vless_crypto_value edge cases
-# =============================================================================
-
-@test "validators::vless_crypto_value - accepts none" {
-  run validators::vless_crypto_value "none"
-  [ "$status" -eq 0 ]
-}
-
-@test "validators::vless_crypto_value - accepts mlkem format" {
-  run validators::vless_crypto_value "mlkem768x25519plus.native.600s.ABCD0123abcd_-"
-  [ "$status" -eq 0 ]
-}
-
-@test "validators::vless_crypto_value - rejects empty value" {
-  run validators::vless_crypto_value ""
-  [ "$status" -ne 0 ]
-}
-
-@test "validators::vless_crypto_value - rejects unsupported algorithm" {
-  run validators::vless_crypto_value "invalidalgo.native.600s.key"
-  [ "$status" -ne 0 ]
-}
-
-@test "validators::vless_crypto_value - rejects too few segments" {
-  run validators::vless_crypto_value "mlkem768x25519plus.native"
-  [ "$status" -ne 0 ]
-}

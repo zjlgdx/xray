@@ -12,8 +12,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "${HERE}/lib/defaults.sh"
 # shellcheck source=lib/validators.sh
 . "${HERE}/lib/validators.sh"
-# shellcheck source=lib/error_codes.sh
-. "${HERE}/lib/error_codes.sh"
 
 # Initialize default values
 args::init() {
@@ -146,14 +144,6 @@ Examples:
   --version v1.8.1
 
 EOF
-}
-
-# Show current configuration (debug helper)
-args::show_config() {
-  if [[ "${DEBUG}" == "true" ]]; then
-    core::log debug "parsed arguments" "$(printf '{"version":"%s","fingerprint":"%s","debug":"%s"}' \
-      "${VERSION}" "${FINGERPRINT}" "${DEBUG}")"
-  fi
 }
 
 # Export parsed arguments as environment variables

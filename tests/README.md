@@ -40,10 +40,14 @@ Retired plugin, template, dual-topology, Caddy, certificate, firewall, sysctl, a
 
 ## Evidence boundaries
 
-The latest local acceptance for this change recorded 978 unit passes with 16 skips, 33 integration passes with 1 skip, and five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
+The unused-helper cleanup on 2026-09-26 recorded 851 unit passes with 16 skips and 32 integration passes with 1 skip. The preceding REALITY-only change recorded five fresh Ubuntu Docker lifecycle scenarios with official v26.9.9; those Docker scenarios were not rerun for this cleanup. Check GitHub Actions on the corresponding PR and commit for its actual CI result; local validation does not establish that CI ran. Do not describe local mocks as a real systemd or client connection test.
 
 ## Bats and coverage setup
 
 Install bats-core, ShellCheck, shfmt, jq, and optional kcov with your host package manager. Minimal Linux containers also need a readable `/dev/fd/0`; restore `/dev/fd` with `sudo ln -sf /proc/self/fd /dev/fd` if bats fails before running tests. For real shell coverage, use `make coverage-unit-real` or `make coverage-real`. These local Make targets report coverage percentages; CI reads `.github/coverage/unit-threshold.txt` and enforces the unit threshold. Integration coverage is reported separately. If kcov exits nonzero because of a bats DEBUG-trap conflict, inspect `coverage.json` before drawing a conclusion.
 
 For isolated tests, use `setup_test_env`/`cleanup_test_env` from `tests/test_helper.bash`. Name behavior and fault cases explicitly, keep mocks narrow, and call production functions for lifecycle claims. When a shell test file is new and untracked, run ShellCheck explicitly because the Makefile lint file list comes from tracked files.
+
+## Retired helper coverage
+
+Tests follow production entry points. Unused dependency/plugin installers, structured error-message helpers, VLESS encryption validators, and duplicate utility APIs have been removed together with their isolated tests. UUID generation still validates its output through the shared validator; core initialization still checks actual shell options. Lifecycle, rollback, credential protection, and configuration validation tests remain in scope.

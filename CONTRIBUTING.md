@@ -242,12 +242,9 @@ core::log debug "Debug information" "$(printf '{"var":"%s"}' "${value}")"
 . "${HERE}/lib/errors.sh"
 
 # Return error codes
-validators::domain "${domain}" || return "${ERR_INVALID_DOMAIN}"
+validators::port "${port}" || return "${ERR_INVALID_ARG}"
 
-# Exit with error code
-errors::exit "${ERR_CONFIG}" "XRAY_PRIVATE_KEY required"
-
-# Or use fatal log level (exits immediately)
+# Use fatal log level for unrecoverable failures (exits immediately)
 core::log fatal "XRAY_PRIVATE_KEY required"
 ```
 

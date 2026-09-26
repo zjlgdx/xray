@@ -91,7 +91,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          mapfile -t files < <(git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'plugins/**/*.sh' 'scripts/**/*.sh' 2>/dev/null)
+          mapfile -t files < <(git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'scripts/**/*.sh' 2>/dev/null)
           if ((${#files[@]} > 0)); then
             shfmt -i 2 -ci -sr -bn -ln=bash -d "${files[@]}"
           fi
@@ -271,7 +271,7 @@ jobs:
           # capture exit code but continue to process coverage data.
           kcov_rc=0
           kcov --bash-dont-parse-binary-dir \
-            --include-path="${GITHUB_WORKSPACE}/lib,${GITHUB_WORKSPACE}/commands,${GITHUB_WORKSPACE}/modules,${GITHUB_WORKSPACE}/services,${GITHUB_WORKSPACE}/plugins,${GITHUB_WORKSPACE}/bin" \
+            --include-path="${GITHUB_WORKSPACE}/lib,${GITHUB_WORKSPACE}/commands,${GITHUB_WORKSPACE}/modules,${GITHUB_WORKSPACE}/services,${GITHUB_WORKSPACE}/bin" \
             --exclude-path=/tmp \
             artifacts/coverage/unit \
             bats tests/unit/*.bats || kcov_rc=$?
@@ -336,7 +336,7 @@ jobs:
         run: |
           mkdir -p artifacts/coverage/integration
           kcov --bash-dont-parse-binary-dir \
-            --include-path="${GITHUB_WORKSPACE}/lib,${GITHUB_WORKSPACE}/commands,${GITHUB_WORKSPACE}/modules,${GITHUB_WORKSPACE}/services,${GITHUB_WORKSPACE}/plugins,${GITHUB_WORKSPACE}/bin" \
+            --include-path="${GITHUB_WORKSPACE}/lib,${GITHUB_WORKSPACE}/commands,${GITHUB_WORKSPACE}/modules,${GITHUB_WORKSPACE}/services,${GITHUB_WORKSPACE}/bin" \
             --exclude-path=/tmp \
             artifacts/coverage/integration \
             bats tests/integration/*.bats || true
@@ -383,7 +383,7 @@ jobs:
 
       - name: Run ShellCheck security checks
         run: |
-          mapfile -t files < <(git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'plugins/**/*.sh' 'scripts/**/*.sh' 2>/dev/null)
+          mapfile -t files < <(git ls-files '*.sh' 'bin/*' 'commands/*' 'lib/*' 'modules/**/*' 'services/**/*' 'scripts/**/*.sh' 2>/dev/null)
           if ((${#files[@]} > 0)); then
             shellcheck -S error -f json "${files[@]}" > shellcheck-report.json || true
           else
