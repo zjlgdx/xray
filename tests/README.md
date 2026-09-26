@@ -85,6 +85,8 @@ lint gate and JSON report remain; neither is a dedicated secret scanner.
   directory link and reject a dangling link.
 - `unit/test_health_check.bats` distinguishes JSON fields from unrelated strings:
   port 443 with loglevel `warning` stays compatible, non-443 REALITY inbounds
-  warn with loglevel `error`, deprecated keys and Apple/iCloud targets still warn,
+  warn with loglevel `error`, deprecated keys and all five configured Apple/iCloud
+  destination families still warn (with hostname boundaries, case folding, and
+  both target/dest fields),
   and malformed JSON is not reported as compatible. Binary log parsing remains
   covered separately by `unit/test_xray_paths.bats`.

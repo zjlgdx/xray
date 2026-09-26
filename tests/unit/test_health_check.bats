@@ -337,16 +337,34 @@ JSON
   [ -z "$output" ]
 }
 
-@test "health::check_compatibility - detects Apple targets and legacy destinations without log keywords" {
-  local active_dir="${BATS_TEST_TMPDIR}/compat-destination" field
+@test "health::check_compatibility - detects all configured Apple destination families" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-destination" field domain target
   mkdir -p "${active_dir}"
   xray::active() { printf '%s\n' "${active_dir}"; }
   for field in target dest; do
-    jq -n --arg field "$field" '{log:{loglevel:"error"},inbounds:[{port:443,streamSettings:{security:"reality",realitySettings:{($field):"Gateway.iCloud.COM:443"}}}]}' > "${active_dir}/config.json"
-    run health::check_compatibility
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"Apple/iCloud REALITY destinations"* ]]
-    [[ "$output" != *"non-443 port"* ]]
+    for domain in apple.com icloud.com cdn-apple.com icloud-content.com mzstatic.com; do
+      for target in "${domain}:443" "Gateway.${domain^^}:443"; do
+        jq -n --arg field "$field" --arg target "$target" '{log:{loglevel:"error"},inbounds:[{port:443,streamSettings:{security:"reality",realitySettings:{($field):$target}}}]}' > "${active_dir}/config.json"
+        run health::check_compatibility
+        [ "$status" -eq 1 ]
+        [[ "$output" == *"Apple/iCloud REALITY destinations"* ]]
+        [[ "$output" != *"non-443 port"* ]]
+      done
+    done
+  done
+}
+
+@test "health::check_compatibility - Apple hostname boundaries reject lookalikes" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-lookalikes" domain target
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  for domain in apple.com icloud.com cdn-apple.com icloud-content.com mzstatic.com; do
+    for target in "not${domain}:443" "${domain}.example.com:443"; do
+      jq -n --arg target "$target" '{log:{loglevel:"warning"},inbounds:[{port:443,streamSettings:{security:"reality",realitySettings:{target:$target}}}]}' > "${active_dir}/config.json"
+      run health::check_compatibility
+      [ "$status" -eq 0 ]
+      [ -z "$output" ]
+    done
   done
 }
 

@@ -223,7 +223,7 @@ health::check_compatibility() {
       else empty end),
       (if any($reality[];
         (.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // "") |
-        tostring | ascii_downcase | test("(^|\\.)(apple|icloud)\\.com(:[0-9]+)?$")
+        tostring | ascii_downcase | test("(^|\\.)(apple|icloud|cdn-apple|icloud-content|mzstatic)\\.com(:[0-9]+)?$")
       ) then
         "Apple/iCloud REALITY destinations may cause IP blocking; choose a different target"
       else empty end)
