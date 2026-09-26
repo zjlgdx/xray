@@ -22,6 +22,7 @@ setup_mock_xray() {
   local state_content='{"name":"reality-only","version":"v1.8.0"}'
   io::ensure_dir "$(dirname "$(state::path)")" 0755
   printf '%s\n' "${state_content}" > "$(state::path)"
+  printf 'digest\n' > "$(state::digest)"
 }
 
 # Test helper: Create mock backup

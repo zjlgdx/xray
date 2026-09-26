@@ -116,70 +116,6 @@ setup() {
 }
 
 # ============================================================================
-# health::check_certificates() Tests
-# ============================================================================
-
-@test "health::check_certificates - skips check if state is empty" {
-  # Mock state::load to return empty
-  state::load() { echo "{}"; }
-
-  run health::check_certificates
-  [ "$status" -eq 0 ]
-}
-
-@test "health::check_certificates - skips check for reality-only topology" {
-  # Mock state::load to return reality-only topology
-  state::load() { echo '{"name":"reality-only"}'; }
-
-  run health::check_certificates
-  [ "$status" -eq 0 ]
-}
-
-@test "health::check_certificates - checks certificates for vision-reality" {
-  skip "requires actual certificates"
-
-  # Mock state::load to return vision-reality topology
-  state::load() { echo '{"name":"vision-reality","xray":{"domain":"example.com"}}'; }
-
-  run health::check_certificates
-  # Status depends on whether certificates exist and are valid
-  [ "$status" -eq 0 ] || [ "$status" -eq 1 ]
-}
-
-@test "health::check_certificates - returns 1 if certificates missing" {
-  # Mock state to return vision-reality with non-existent domain
-  state::load() { echo '{"name":"vision-reality","xray":{"domain":"nonexistent.local"}}'; }
-
-  run health::check_certificates
-  [ "$status" -eq 1 ]
-}
-
-@test "health::check_certificates - uses cert_dir from state when provided" {
-  local cert_dir="${BATS_TEST_TMPDIR}/certs-custom"
-  mkdir -p "${cert_dir}"
-  touch "${cert_dir}/fullchain.pem" "${cert_dir}/privkey.pem"
-
-  state::load() {
-    printf '{"name":"vision-reality","xray":{"domain":"example.com","cert_dir":"%s"}}\n' "${cert_dir}"
-  }
-
-  openssl() {
-    if [[ "${1:-}" == "x509" ]]; then
-      local arg
-      for arg in "$@"; do
-        if [[ "${arg}" == "-checkend" ]]; then
-          return 0
-        fi
-      done
-    fi
-    command openssl "$@"
-  }
-
-  run health::check_certificates
-  [ "$status" -eq 0 ]
-}
-
-# ============================================================================
 # health::run() Tests - Text Format
 # ============================================================================
 
@@ -197,7 +133,6 @@ setup() {
   [[ "$output" =~ "Service Status" ]]
   [[ "$output" =~ "Configuration" ]]
   [[ "$output" =~ "Network" ]]
-  [[ "$output" =~ "Certificates" ]]
   [[ "$output" =~ "Compatibility" ]]
 }
 
@@ -236,7 +171,6 @@ setup() {
   [[ "$output" =~ '"service"' ]]
   [[ "$output" =~ '"config"' ]]
   [[ "$output" =~ '"network"' ]]
-  [[ "$output" =~ '"certificates"' ]]
   [[ "$output" =~ '"compatibility"' ]]
 }
 
@@ -264,7 +198,6 @@ setup() {
   [ "$(type -t health::check_service)" = "function" ]
   [ "$(type -t health::check_config)" = "function" ]
   [ "$(type -t health::check_network)" = "function" ]
-  [ "$(type -t health::check_certificates)" = "function" ]
   [ "$(type -t health::check_compatibility)" = "function" ]
   [ "$(type -t health::run)" = "function" ]
 }
@@ -317,13 +250,5 @@ JSON
 
   run health::check_config
   # Should not crash even if xray -test fails
-  [ "$status" -eq 0 ] || [ "$status" -eq 1 ]
-}
-
-@test "health::check_certificates handles missing openssl gracefully" {
-  skip "requires environment without openssl"
-
-  run health::check_certificates
-  # Should not crash if openssl is missing
   [ "$status" -eq 0 ] || [ "$status" -eq 1 ]
 }

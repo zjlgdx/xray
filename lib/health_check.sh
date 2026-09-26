@@ -7,8 +7,6 @@ readonly _XRF_HEALTH_CHECK_LOADED=1
 
 # Load required modules
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=lib/defaults.sh
-. "${HERE}/lib/defaults.sh"
 # shellcheck source=modules/state.sh
 . "${HERE}/modules/state.sh"
 # shellcheck source=services/xray/common.sh
@@ -154,24 +152,14 @@ health::check_network() {
     return 1
   fi
 
-  # Extract topology
-  local topology
-  topology="$(echo "${state}" | jq -r '.name // "unknown"')"
-
-  # Determine which ports to check based on topology
-  local ports_to_check=()
-  if [[ "${topology}" == "vision-reality" ]]; then
-    local vision_port reality_port
-    vision_port="$(echo "${state}" | jq -r '.xray.vision_port // 8443')"
-    reality_port="$(echo "${state}" | jq -r '.xray.reality_port // 443')"
-    ports_to_check=("${vision_port}" "${reality_port}")
-  else
-    local xray_port
-    xray_port="$(echo "${state}" | jq -r '.xray.port // 443')"
-    ports_to_check=("${xray_port}")
+  local port
+  if ! port="$(printf '%s\n' "${state}" | jq -er 'select(.name == "reality-only") | .xray.port')" \
+    || [[ ! "${port}" =~ ^[0-9]+$ ]]; then
+    core::log warn "managed REALITY listener port missing" '{}'
+    return 1
   fi
 
-  # Check if ports are listening
+  # Check whether the managed REALITY port is listening.
   # Try ss first (modern), fall back to netstat
   local check_cmd=""
   if command -v ss > /dev/null 2>&1; then
@@ -183,117 +171,13 @@ health::check_network() {
     return 1
   fi
 
-  local all_listening=0
-  for port in "${ports_to_check[@]}"; do
-    local is_listening=0
-
-    if [[ "${check_cmd}" == "ss" ]]; then
-      # Check with ss
-      if ss -tuln | grep -q ":${port} "; then
-        is_listening=1
-      fi
-    else
-      # Check with netstat
-      if netstat -tuln | grep -q ":${port} "; then
-        is_listening=1
-      fi
-    fi
-
-    if [[ "${is_listening}" -eq 1 ]]; then
-      core::log debug "port is listening" "$(printf '{"port":%d}' "${port}")"
-    else
-      core::log warn "port is not listening" "$(printf '{"port":%d}' "${port}")"
-      all_listening=1
-    fi
-  done
-
-  return "${all_listening}"
-}
-
-##
-# Check certificate validity (vision-reality only)
-#
-# Checks if TLS certificates exist and are valid (not expired).
-# Only runs for vision-reality topology.
-#
-# Arguments:
-#   None
-#
-# Globals:
-#   Reads state.json via state::load
-#   Uses DEFAULT_XRAY_CERT_DIR from lib/defaults.sh
-#
-# Output:
-#   Certificate status to stderr (via core::log)
-#
-# Returns:
-#   0 - Certificates are valid or check not applicable
-#   1 - Certificates are missing or expired
-#
-# Example:
-#   health::check_certificates
-##
-health::check_certificates() {
-  core::log debug "checking certificates" "{}"
-
-  # Load state to get topology
-  local state
-  state="$(state::load)"
-
-  if [[ -z "${state}" || "${state}" == "{}" ]]; then
-    core::log debug "no state found, skipping certificate check" "{}"
-    return 0
+  if [[ "${check_cmd}" == "ss" ]]; then
+    ss -tuln | grep -q ":${port} " && return 0
+  else
+    netstat -tuln | grep -q ":${port} " && return 0
   fi
-
-  # Extract topology
-  local topology
-  topology="$(echo "${state}" | jq -r '.name // "unknown"')"
-
-  # Only check certificates for vision-reality
-  if [[ "${topology}" != "vision-reality" ]]; then
-    core::log debug "reality-only topology, skipping certificate check" "{}"
-    return 0
-  fi
-
-  # Extract domain and cert dir
-  local domain cert_dir
-  domain="$(echo "${state}" | jq -r '.xray.domain // ""')"
-  cert_dir="$(echo "${state}" | jq -r '.xray.cert_dir // empty')"
-  # shellcheck disable=SC2154  # DEFAULT_XRAY_CERT_DIR from lib/defaults.sh
-  [[ -n "${cert_dir}" ]] || cert_dir="${DEFAULT_XRAY_CERT_DIR}"
-
-  if [[ -z "${domain}" ]]; then
-    core::log warn "no domain found in state, skipping certificate check" "{}"
-    return 1
-  fi
-
-  # Check if certificates exist
-  local fullchain="${cert_dir}/fullchain.pem"
-  local privkey="${cert_dir}/privkey.pem"
-
-  if [[ ! -f "${fullchain}" ]]; then
-    core::log warn "certificate not found" "$(printf '{"file":"%s"}' "${fullchain}")"
-    return 1
-  fi
-
-  if [[ ! -f "${privkey}" ]]; then
-    core::log warn "private key not found" "$(printf '{"file":"%s"}' "${privkey}")"
-    return 1
-  fi
-
-  # Check if certificate is expired
-  # openssl x509 -checkend 0 returns 0 if not expired
-  if ! openssl x509 -in "${fullchain}" -noout -checkend 0 > /dev/null 2>&1; then
-    core::log warn "certificate is expired" "$(printf '{"cert":"%s"}' "${fullchain}")"
-    return 1
-  fi
-
-  # Extract expiry date for logging
-  local expiry_date
-  expiry_date=$(openssl x509 -in "${fullchain}" -noout -enddate 2> /dev/null | cut -d= -f2)
-
-  core::log debug "certificates are valid" "$(printf '{"expiry":"%s"}' "${expiry_date}")"
-  return 0
+  core::log warn "port is not listening" "$(printf '{"port":%d}' "${port}")"
+  return 1
 }
 
 ##
@@ -361,14 +245,12 @@ health::run() {
   local service_ok=0
   local config_ok=0
   local network_ok=0
-  local certs_ok=0
   local compat_ok=0
   local compat_output=""
 
   health::check_service && service_ok=1 || service_ok=0
   health::check_config && config_ok=1 || config_ok=0
   health::check_network && network_ok=1 || network_ok=0
-  health::check_certificates && certs_ok=1 || certs_ok=0
   if compat_output="$(health::check_compatibility)"; then
     compat_ok=1
   else
@@ -377,12 +259,12 @@ health::run() {
 
   # Calculate overall status
   local all_passed=0
-  if [[ "${service_ok}" -eq 1 && "${config_ok}" -eq 1 && "${network_ok}" -eq 1 && "${certs_ok}" -eq 1 ]]; then
+  if [[ "${service_ok}" -eq 1 && "${config_ok}" -eq 1 && "${network_ok}" -eq 1 ]]; then
     all_passed=1
   fi
 
   # Get detailed status messages
-  local service_msg config_msg network_msg certs_msg compat_msg
+  local service_msg config_msg network_msg compat_msg
   if [[ "${service_ok}" -eq 1 ]]; then
     service_msg="xray.service is active (running)"
   else
@@ -399,26 +281,6 @@ health::run() {
     network_msg="All required ports listening"
   else
     network_msg="Some ports not listening"
-  fi
-
-  # Load state to check topology for cert message
-  local state topology cert_dir
-  state="$(state::load)"
-  topology="$(echo "${state}" | jq -r '.name // "unknown"')"
-  cert_dir="$(echo "${state}" | jq -r '.xray.cert_dir // empty')"
-  # shellcheck disable=SC2154  # DEFAULT_XRAY_CERT_DIR from lib/defaults.sh
-  [[ -n "${cert_dir}" ]] || cert_dir="${DEFAULT_XRAY_CERT_DIR}"
-
-  if [[ "${topology}" != "vision-reality" ]]; then
-    certs_msg="N/A (reality-only topology)"
-  elif [[ "${certs_ok}" -eq 1 ]]; then
-    # Extract expiry date
-    local cert_file="${cert_dir}/fullchain.pem"
-    local expiry_date
-    expiry_date=$(openssl x509 -in "${cert_file}" -noout -enddate 2> /dev/null | cut -d= -f2 | awk '{print $1, $2, $4}')
-    certs_msg="Valid until ${expiry_date}"
-  else
-    certs_msg="Missing or expired certificates"
   fi
 
   if [[ "${compat_ok}" -eq 1 ]]; then
@@ -438,7 +300,6 @@ health::run() {
     "service": {"passed": $([ "${service_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${service_msg}"},
     "config": {"passed": $([ "${config_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${config_msg}"},
     "network": {"passed": $([ "${network_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${network_msg}"},
-    "certificates": {"passed": $([ "${certs_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${certs_msg}"},
     "compatibility": {"passed": $([ "${compat_ok}" -eq 1 ] && echo "true" || echo "false"), "message": "${compat_msg}"}
   },
   "overall": $([ "${all_passed}" -eq 1 ] && echo "true" || echo "false")
@@ -452,7 +313,6 @@ EOF
     printf '  %s Service Status    %s\n' "$([ "${service_ok}" -eq 1 ] && echo "✓" || echo "✗")" "${service_msg}"
     printf '  %s Configuration     %s\n' "$([ "${config_ok}" -eq 1 ] && echo "✓" || echo "✗")" "${config_msg}"
     printf '  %s Network           %s\n' "$([ "${network_ok}" -eq 1 ] && echo "✓" || echo "✗")" "${network_msg}"
-    printf '  %s Certificates      %s\n' "$([ "${certs_ok}" -eq 1 ] && echo "✓" || echo "✗")" "${certs_msg}"
     printf '  %s Compatibility     %s\n' "$([ "${compat_ok}" -eq 1 ] && echo "✓" || echo "!")" "${compat_msg}"
     printf '\n'
 

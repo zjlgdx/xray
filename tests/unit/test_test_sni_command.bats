@@ -1,128 +1,69 @@
 #!/usr/bin/env bats
-# Unit tests for commands/test-sni.sh using real command execution
-
+# Production test-sni CLI argument and exit behavior.
 load ../test_helper
-
-install_network_stubs() {
-  mkdir -p "${TEST_TMPDIR}/bin"
-
-  cat > "${TEST_TMPDIR}/bin/timeout" <<'EOF'
-#!/usr/bin/env bash
-shift
-"$@"
-EOF
-  chmod +x "${TEST_TMPDIR}/bin/timeout"
-
-  cat > "${TEST_TMPDIR}/bin/openssl" <<'EOF'
-#!/usr/bin/env bash
-if [[ "${1:-}" == "s_client" ]]; then
-  printf '%b\n' "${MOCK_OPENSSL_OUTPUT:-Protocol  : TLSv1.3\nCipher    : TLS_AES_128_GCM_SHA256}"
-  exit 0
-fi
-exit 1
-EOF
-  chmod +x "${TEST_TMPDIR}/bin/openssl"
-
-  cat > "${TEST_TMPDIR}/bin/curl" <<'EOF'
-#!/usr/bin/env bash
-args="$*"
-url="${@: -1}"
-
-if [[ "${args}" == *"%{http_version}"* ]]; then
-  printf '%s\n' "${MOCK_CURL_HTTP_VERSION:-2}"
-  exit 0
-fi
-
-if [[ "${args}" == *"%{url_effective}"* ]]; then
-  printf '%s\n' "${MOCK_CURL_EFFECTIVE_URL:-${url}}"
-  exit 0
-fi
-
-exit 1
-EOF
-  chmod +x "${TEST_TMPDIR}/bin/curl"
-}
 
 setup() {
   setup_test_env
-  ORIGINAL_PATH="${PATH}"
-  install_network_stubs
+  mkdir -p "${TEST_TMPDIR}/bin"
+  export XRF_PROBE_CALLS="${TEST_TMPDIR}/probe.calls"
+  cat > "${TEST_TMPDIR}/bin/timeout" <<'SCRIPT'
+#!/usr/bin/env bash
+shift
+"$@"
+SCRIPT
+  cat > "${TEST_TMPDIR}/bin/openssl" <<'SCRIPT'
+#!/usr/bin/env bash
+printf 'openssl %s\n' "$*" >> "$XRF_PROBE_CALLS"
+printf 'Protocol: %s\n' "${MOCK_TLS_VERSION:-TLSv1.3}"
+SCRIPT
+  cat > "${TEST_TMPDIR}/bin/curl" <<'SCRIPT'
+#!/usr/bin/env bash
+printf 'curl %s\n' "$*" >> "$XRF_PROBE_CALLS"
+case "$*" in
+  *http_version*) printf '%s' "${MOCK_HTTP_VERSION:-2}" ;;
+  *redirect_url*) printf '%s' "${MOCK_REDIRECT_URL:-}" ;;
+esac
+SCRIPT
+  chmod +x "${TEST_TMPDIR}/bin/"*
   export PATH="${TEST_TMPDIR}/bin:${PATH}"
-  export XRF_JSON="false"
-  export XRF_DEBUG="false"
 }
 
-teardown() {
-  export PATH="${ORIGINAL_PATH}"
-  cleanup_test_env
-}
+teardown() { cleanup_test_env; }
 
-@test "test-sni command prints usage with --help" {
+@test "test-sni help documents explicit target" {
   run "${PROJECT_ROOT}/commands/test-sni.sh" --help
-
   [ "$status" -eq 0 ]
-  [[ "${output}" == *"Usage: xrf test-sni <domain> [options]"* ]]
-  [[ "${output}" == *"--port <port>"* ]]
-  [[ "${output}" == *"--json"* ]]
+  [[ "$output" == *'--target <host:port>'* ]]
 }
 
-@test "test-sni command rejects unknown options" {
-  run "${PROJECT_ROOT}/commands/test-sni.sh" example.com --bad-option
-
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"unknown option"* ]]
-  [[ "${output}" == *"Usage: xrf test-sni"* ]]
-}
-
-@test "test-sni command requires a domain" {
+@test "test-sni requires SNI and rejects ambiguous or malformed target" {
   run "${PROJECT_ROOT}/commands/test-sni.sh"
-
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"domain required"* ]]
-  [[ "${output}" == *"Usage: xrf test-sni"* ]]
+  [ "$status" -ne 0 ]
+  run "${PROJECT_ROOT}/commands/test-sni.sh" sni.example.com --target target.example.com:443 --port 443
+  [ "$status" -ne 0 ]
+  run "${PROJECT_ROOT}/commands/test-sni.sh" sni.example.com --target target.example.com:bad
+  [ "$status" -ne 0 ]
+  [ ! -e "${XRF_PROBE_CALLS}" ]
 }
 
-@test "test-sni command rejects unexpected extra positional arguments" {
-  run "${PROJECT_ROOT}/commands/test-sni.sh" example.com extra.example.com
-
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"unexpected argument"* ]]
-  [[ "${output}" == *"extra.example.com"* ]]
-}
-
-@test "test-sni command passes custom port and json flag to validator" {
-  export MOCK_OPENSSL_OUTPUT=$'Protocol  : TLSv1.3\nCipher    : TLS_AES_128_GCM_SHA256'
-  export MOCK_CURL_HTTP_VERSION="2"
-  export MOCK_CURL_EFFECTIVE_URL="https://valid.example.com/"
-
-  run "${PROJECT_ROOT}/commands/test-sni.sh" valid.example.com --port 8443 --json
-
+@test "test-sni sends explicit target and SNI through the production validator" {
+  run "${PROJECT_ROOT}/commands/test-sni.sh" sni.example.com --target target.example.com:8443 --json
   [ "$status" -eq 0 ]
-  [[ "${output}" == *'"domain": "valid.example.com"'* ]]
-  [[ "${output}" == *'"port": 8443'* ]]
-  [[ "${output}" == *'"passed": true'* ]]
+  [[ "$output" == *'"passed": true'* ]]
+  grep -F -- '-connect target.example.com:8443 -servername sni.example.com' "${XRF_PROBE_CALLS}"
+  [ "$(grep -Fc -- '--connect-to sni.example.com:8443:target.example.com:8443' "${XRF_PROBE_CALLS}")" -eq 2 ]
 }
 
-@test "test-sni command uses port 443 by default" {
-  export MOCK_OPENSSL_OUTPUT=$'Protocol  : TLSv1.3\nCipher    : TLS_AES_128_GCM_SHA256'
-  export MOCK_CURL_HTTP_VERSION="2"
-  export MOCK_CURL_EFFECTIVE_URL="https://default.example.com/"
-
-  run "${PROJECT_ROOT}/commands/test-sni.sh" default.example.com --json
-
+@test "test-sni defaults target to SNI port 443" {
+  run "${PROJECT_ROOT}/commands/test-sni.sh" sni.example.com --json
   [ "$status" -eq 0 ]
-  [[ "${output}" == *'"port": 443'* ]]
-  [[ "${output}" == *'"passed": true'* ]]
+  [[ "$output" == *'"port": 443'* ]]
+  grep -F -- '-connect sni.example.com:443 -servername sni.example.com' "${XRF_PROBE_CALLS}"
 }
 
-@test "test-sni command returns non-zero when validation fails" {
-  export MOCK_OPENSSL_OUTPUT=$'Protocol  : TLSv1.2\nCipher    : ECDHE-RSA-AES128-GCM-SHA256'
-  export MOCK_CURL_HTTP_VERSION="1.1"
-  export MOCK_CURL_EFFECTIVE_URL="https://redirected.example.net/"
-
-  run "${PROJECT_ROOT}/commands/test-sni.sh" broken.example.com --json
-
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *'"domain": "broken.example.com"'* ]]
-  [[ "${output}" == *'"passed": false'* ]]
+@test "test-sni propagates diagnostic failure in JSON" {
+  export MOCK_REDIRECT_URL='https://sni.example.com/login'
+  run "${PROJECT_ROOT}/commands/test-sni.sh" sni.example.com --json
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'"passed": false'* ]]
 }

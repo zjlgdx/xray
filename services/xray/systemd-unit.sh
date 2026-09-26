@@ -80,11 +80,35 @@ rollback_systemd_unit() {
 }
 remove_unit() {
   core::init "${@}"
-  local unit_file
+  local unit_file active_state unit_state was_active=false was_enabled=false
   unit_file="$(systemd_unit_path)"
-  systemctl disable --now xray || true
-  rm -f "${unit_file}"
-  systemctl daemon-reload || true
+  active_state="$(systemctl show --property=ActiveState --value xray.service)" || return 1
+  unit_state="$(systemctl show --property=UnitFileState --value xray.service)" || return 1
+  case "${active_state}" in
+    active) was_active=true ;;
+    inactive | failed) ;;
+    *)
+      core::log error "unknown xray service state" "$(printf '{"state":"%s"}' "${active_state}")"
+      return 1
+      ;;
+  esac
+  case "${unit_state}" in
+    enabled | enabled-runtime) was_enabled=true ;;
+    disabled | static | masked | indirect | not-found) ;;
+    "") [[ ! -e "${unit_file}" ]] || return 1 ;;
+    *)
+      core::log error "unknown xray unit state" "$(printf '{"state":"%s"}' "${unit_state}")"
+      return 1
+      ;;
+  esac
+  if [[ "${was_active}" == true ]]; then
+    systemctl stop xray || return 1
+  fi
+  if [[ "${was_enabled}" == true ]]; then
+    systemctl disable xray || return 1
+  fi
+  rm -f "${unit_file}" || return 1
+  systemctl daemon-reload || return 1
   systemctl reset-failed xray.service 2> /dev/null || true
   core::log info "systemd unit removed" "{}"
 }

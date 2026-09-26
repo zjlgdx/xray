@@ -170,7 +170,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -206,7 +205,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -243,7 +241,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -279,7 +276,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -317,7 +313,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -357,7 +352,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -532,7 +526,6 @@ EOF
 
   PATH="$(mock_path)" run bash -c '
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -567,7 +560,6 @@ EOF
 
   PATH="$(mock_path)" run bash -c '
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -599,7 +591,6 @@ EOF
 @test "remove_unit - succeeds when unit file does not exist" {
   PATH="$(mock_path)" run bash -c '
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -637,7 +628,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"
@@ -675,7 +665,6 @@ EOF
     source "'"${PROJECT_ROOT}/lib/core.sh"'"
     source "'"${PROJECT_ROOT}/modules/io.sh"'"
     source "'"${PROJECT_ROOT}/modules/user/user.sh"'"
-    source "'"${PROJECT_ROOT}/lib/plugins.sh"'"
     source "'"${PROJECT_ROOT}/modules/state.sh"'"
     export XRF_SYSTEMD_DIR="'"${TEST_TMPDIR}/etc/systemd/system"'"
     export XRF_VAR="'"${XRF_VAR}"'"

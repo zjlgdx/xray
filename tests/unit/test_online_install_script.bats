@@ -17,7 +17,7 @@ teardown() {
     TMP_DIR="$(mktemp -d)"
     trap '"'"'rm -rf "${TMP_DIR}"'"'"' EXIT
     source_args_module
-    parse_args --topology reality-only --yes
+    parse_args --yes
     printf "%s" "${XRF_YES}"
   '
 
@@ -28,7 +28,7 @@ teardown() {
 @test "install.sh - help documents --yes" {
   run grep -n -- '--yes, -y' "${PROJECT_ROOT}/install.sh"
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"Auto-confirm installation"* ]]
+  [[ "${output}" == *"Auto-confirm fresh installation"* ]]
 }
 
 @test "install.sh - run_xray_install forwards --yes to xrf install" {
@@ -49,10 +49,8 @@ EOF
     sed -i.bak "s|__CALLS_FILE__|${workdir}/calls.log|" "${INSTALL_DIR}/bin/xrf"
     chmod +x "${INSTALL_DIR}/bin/xrf"
 
-    TOPOLOGY="reality-only"
-    DOMAIN="vpn.example.com"
+    XRAY_SNI="vpn.example.com"
     VERSION="v1.2.3"
-    PLUGINS="cert-auto,firewall"
     DEBUG="true"
     XRF_YES="true"
     INTEGRITY_VERIFIED="true"
@@ -62,27 +60,26 @@ EOF
   '
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"install --topology reality-only --domain vpn.example.com --version v1.2.3 --plugins cert-auto,firewall --debug --yes"* ]]
+  [[ "${output}" == *"install --version v1.2.3 --debug --yes"* ]]
   [[ "${output}" == *"status"* ]]
 }
 
-@test "install.sh - setup_environment exports domain debug and signed tag requirements" {
+@test "install.sh - setup_environment exports debug and signed tag requirements" {
   run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     TMP_DIR="$(mktemp -d)"
     trap '"'"'rm -rf "${TMP_DIR}"'"'"' EXIT
 
-    DOMAIN="vpn.example.com"
     DEBUG="true"
     BRANCH="v1.2.3"
     ALLOW_UNSIGNED_TAG="false"
 
     setup_environment
-    printf "%s|%s|%s|%s" "${XRAY_DOMAIN}" "${XRF_DEBUG}" "${REF_TYPE}" "${REQUIRE_SIGNED_TAG}"
+    printf "%s|%s" "${XRF_DEBUG}" "${REQUIRE_SIGNED_TAG}"
   '
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "vpn.example.com|true|tags|true" ]
+  [ "${output}" = "true|true" ]
 }
 
 @test "install.sh - cleanup_partial_installation removes fresh install artifacts" {
@@ -207,10 +204,8 @@ EOF
     SYMLINK_PATH="'"${workdir}"'/bin/xrf"
     INSTALL_DIR_PREEXISTING="false"
     INSTALL_MARKER="${INSTALL_DIR}/.install_in_progress"
-    TOPOLOGY="reality-only"
-    DOMAIN=""
+    XRAY_SNI="vpn.example.com"
     VERSION="latest"
-    PLUGINS=""
     DEBUG="false"
     XRF_YES="true"
     INTEGRITY_VERIFIED="false"
@@ -219,7 +214,7 @@ EOF
   '
 
   [ "${status}" -eq 1 ]
-  [[ "${output}" == *"Integrity checks did not complete successfully"* ]]
+  [[ "${output}" == *"Integrity checks did not complete"* ]]
   [ ! -e "${workdir}/install" ]
   [ ! -L "${workdir}/bin/xrf" ]
   [ ! -f "${workdir}/calls.log" ]

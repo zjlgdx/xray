@@ -18,7 +18,6 @@ teardown() {
     # shellcheck source=lib/defaults.sh
     . "${project_root}/lib/defaults.sh"
 
-    [[ -n "${DEFAULT_TOPOLOGY:-}" ]]
     [[ -n "${DEFAULT_XRAY_PORT:-}" ]]
     [[ -n "${DEFAULT_XRAY_FINGERPRINT:-}" ]]
     [[ -n "${DEFAULT_XRAY_LOG_LEVEL:-}" ]]
@@ -34,6 +33,8 @@ teardown() {
     project_root="$1"
     # shellcheck source=lib/defaults.sh
     . "${project_root}/lib/defaults.sh"
+    [[ "${DEFAULT_XRAY_PORT}" =~ ^[0-9]+$ ]]
+    ((DEFAULT_XRAY_PORT > 0 && DEFAULT_XRAY_PORT <= 65535))
 
     ports=(
       "${DEFAULT_XRAY_PORT}"
@@ -55,10 +56,6 @@ teardown() {
     # shellcheck source=lib/defaults.sh
     . "${project_root}/lib/defaults.sh"
 
-    case "${DEFAULT_TOPOLOGY}" in
-      reality-only) ;;
-      *) exit 1 ;;
-    esac
 
     case "${DEFAULT_XRAY_SNIFFING}" in
       true|false) ;;

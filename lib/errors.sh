@@ -23,17 +23,10 @@ readonly ERR_TIMEOUT=7     # Operation timeout
 readonly ERR_HELP_REQUESTED=10 # --help flag (not an error)
 
 # === Validation Errors (20-29) ===
-readonly ERR_INVALID_DOMAIN=20   # Domain validation failed
-readonly ERR_INVALID_PORT=21     # Port validation failed
-readonly ERR_INVALID_UUID=22     # UUID validation failed
-readonly ERR_INVALID_SHORTID=23  # shortId validation failed
-readonly ERR_INVALID_VERSION=24  # Version validation failed
-readonly ERR_INVALID_TOPOLOGY=25 # Topology validation failed
-
-# === Plugin Errors (30-39) ===
-readonly ERR_PLUGIN_NOT_FOUND=30 # Plugin does not exist
-readonly ERR_PLUGIN_LOAD_FAIL=31 # Plugin failed to load
-readonly ERR_PLUGIN_HOOK_FAIL=32 # Plugin hook execution failed
+readonly ERR_INVALID_PORT=21    # Port validation failed
+readonly ERR_INVALID_UUID=22    # UUID validation failed
+readonly ERR_INVALID_SHORTID=23 # shortId validation failed
+readonly ERR_INVALID_VERSION=24 # Version validation failed
 
 # === Service Errors (40-49) ===
 readonly ERR_SERVICE_START_FAIL=40 # Service failed to start
@@ -61,15 +54,10 @@ errors::message() {
     "${ERR_NETWORK}") echo "Network error" ;;
     "${ERR_TIMEOUT}") echo "Operation timeout" ;;
     "${ERR_HELP_REQUESTED}") echo "Help requested" ;;
-    "${ERR_INVALID_DOMAIN}") echo "Invalid domain" ;;
     "${ERR_INVALID_PORT}") echo "Invalid port" ;;
     "${ERR_INVALID_UUID}") echo "Invalid UUID" ;;
     "${ERR_INVALID_SHORTID}") echo "Invalid shortId" ;;
     "${ERR_INVALID_VERSION}") echo "Invalid version" ;;
-    "${ERR_INVALID_TOPOLOGY}") echo "Invalid topology" ;;
-    "${ERR_PLUGIN_NOT_FOUND}") echo "Plugin not found" ;;
-    "${ERR_PLUGIN_LOAD_FAIL}") echo "Plugin load failed" ;;
-    "${ERR_PLUGIN_HOOK_FAIL}") echo "Plugin hook failed" ;;
     "${ERR_SERVICE_START_FAIL}") echo "Service start failed" ;;
     "${ERR_SERVICE_STOP_FAIL}") echo "Service stop failed" ;;
     "${ERR_SERVICE_NOT_FOUND}") echo "Service not found" ;;

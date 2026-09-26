@@ -16,15 +16,24 @@ setup() {
 # Test helper: Create mock xray configuration
 setup_mock_xray() {
   local xray_etc="${XRF_ETC}/xray"
-  mkdir -p "${xray_etc}/active"
+  local release="${xray_etc}/releases/20260926000000"
+  mkdir -p "${release}" "${XRF_PREFIX}/bin"
+  ln -s "${release}" "${xray_etc}/active"
 
   # Create mock configuration file using printf
-  printf '%s\n' '{"inbounds":[{"port":443,"protocol":"vless"}]}' > "${xray_etc}/active/config.json"
+  printf '%s\n' '{"inbounds":[{"port":443,"protocol":"vless"}]}' > "${release}/config.json"
+  cat > "${XRF_PREFIX}/bin/xray" <<'SCRIPT'
+#!/usr/bin/env bash
+[[ "${1:-}" == -test && "${2:-}" == -confdir ]] || exit 1
+jq -e '.inbounds[0].protocol == "vless"' "${3}/config.json" > /dev/null
+SCRIPT
+  chmod +x "${XRF_PREFIX}/bin/xray"
 
   # Create mock state file
   local state_content='{"name":"reality-only","version":"v1.8.0","installed_at":"2023-12-01T00:00:00Z"}'
   io::ensure_dir "$(dirname "$(state::path)")" 0755
   printf '%s\n' "${state_content}" > "$(state::path)"
+  printf '%s\n' 'old-config-digest' > "$(state::digest)"
 }
 
 # Test helper: Create mock backup with metadata
@@ -71,6 +80,22 @@ teardown() {
   # No xray config exists
   run backup::create "test-backup"
   [ "$status" -ne 0 ]
+}
+
+@test "backup::create rejects missing credential state without publishing an archive" {
+  setup_mock_xray
+  rm -f "$(state::path)"
+  run backup::create missing-state
+  [ "$status" -ne 0 ]
+  [ -z "$(find "$(backup::dir)" -name 'missing-state-*.tar.gz' -print -quit)" ]
+}
+
+@test "backup::create rejects missing config digest without publishing an archive" {
+  setup_mock_xray
+  rm -f "$(state::digest)"
+  run backup::create missing-digest
+  [ "$status" -ne 0 ]
+  [ -z "$(find "$(backup::dir)" -name 'missing-digest-*.tar.gz' -print -quit)" ]
 }
 
 @test "backup::create - generates auto name when not provided" {
@@ -165,6 +190,28 @@ teardown() {
 
   run backup::create "enc-weak" "true" "weak-pass"
   [ "$status" -ne 0 ]
+}
+
+@test "backup::create - state copy failure leaves no partial archive" {
+  setup_mock_xray
+  cp() {
+    if [[ "$*" == *"$(state::path)"* ]]; then return 1; fi
+    command cp "$@"
+  }
+  run backup::create "state-copy-fails"
+  [ "$status" -ne 0 ]
+  [ -z "$(find "$(backup::dir)" -name 'state-copy-fails-*' -print)" ]
+}
+
+@test "backup::create - archive chmod failure leaves no partial archive" {
+  setup_mock_xray
+  chmod() {
+    if [[ "${2:-}" == *.tar.gz ]]; then return 1; fi
+    command chmod "$@"
+  }
+  run backup::create "archive-chmod-fails"
+  [ "$status" -ne 0 ]
+  [ -z "$(find "$(backup::dir)" -name 'archive-chmod-fails-*' -print)" ]
 }
 
 # backup::list tests
@@ -316,7 +363,10 @@ EOF
   backup_name="$(basename "$(find "$(backup::dir)" -name 'private-state-*.tar.gz' | head -1)" .tar.gz)"
   chmod 0755 "$(state::dir)"
   chmod 0644 "$(state::path)"
-  systemctl() { return 0; }
+  systemctl() {
+    [[ "${1:-}" == show && "${2:-}" == --property=ActiveState ]] && printf 'active\n'
+    return 0
+  }
   run backup::restore "${backup_name}"
   [ "$status" -eq 0 ]
   [ "$(stat -c '%a' "$(state::dir)" 2>/dev/null || stat -f '%Lp' "$(state::dir)")" = 700 ]

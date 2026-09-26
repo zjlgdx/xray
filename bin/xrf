@@ -14,12 +14,9 @@ Usage: xrf <command>
   links       Print client links
   logs        View, filter, and export Xray logs
   backup      Manage configuration backups
-  export      Export client configuration (uri/v2rayn/clash/sub/qr/all)
   check       Validate config (supports --deep pipeline)
   test-sni    Test SNI domain for REALITY protocol compatibility
   health      Run post-installation health check
-  templates   Manage configuration templates
-  plugin      Manage plugins (list/enable/disable/info)
   help        Show this help
 EOF
 }
@@ -34,12 +31,9 @@ case "${cmd}" in
   links) "${HERE}/services/xray/client-links.sh" "$@" ;;
   logs) "${HERE}/commands/logs.sh" "$@" ;;
   backup) "${HERE}/commands/backup.sh" "$@" ;;
-  export) "${HERE}/commands/export.sh" "$@" ;;
   check) "${HERE}/commands/check.sh" "$@" ;;
   test-sni) "${HERE}/commands/test-sni.sh" "$@" ;;
   health) "${HERE}/commands/health.sh" "$@" ;;
-  templates) "${HERE}/commands/templates.sh" "$@" ;;
-  plugin) "${HERE}/commands/plugin.sh" "$@" ;;
   help | "") usage ;;
   *)
     usage

@@ -308,36 +308,6 @@ teardown() {
   [[ "$output" =~ ^\[([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)\] ]]
 }
 
-@test "caddy-cert-sync log format matches core::log" {
-  # Extract log function from caddy-cert-sync.sh and test it
-  local script="${PROJECT_ROOT}/scripts/caddy-cert-sync.sh"
-
-  # Source only the log function
-  source <(sed -n '/^log()/,/^}/p' "${script}")
-
-  XRF_JSON=false
-  run log info "test message"
-  [ "$status" -eq 0 ]
-
-  # Should use same format as core::log (%-8s width)
-  [[ "$output" =~ ^\[[0-9T:Z-]+\]\ [a-z]+\ {1,8}\[caddy-cert-sync\]\ test\ message ]]
-}
-
-@test "caddy-cert-sync JSON format matches core::log" {
-  # Extract log function from caddy-cert-sync.sh
-  local script="${PROJECT_ROOT}/scripts/caddy-cert-sync.sh"
-  source <(sed -n '/^log()/,/^}/p' "${script}")
-
-  XRF_JSON=true
-  run log info "test message"
-  [ "$status" -eq 0 ]
-
-  # Should be valid JSON
-  echo "$output" | grep -q '{"ts":'
-  echo "$output" | grep -q '"level":"info"'
-  echo "$output" | grep -q '"msg":".*caddy-cert-sync.*test message"'
-}
-
 # =============================================================================
 # core::init() tests
 # =============================================================================

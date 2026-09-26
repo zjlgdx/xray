@@ -6,32 +6,33 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
   cat << 'EOF'
-Usage: xrf test-sni <domain> [options]
+Usage: xrf test-sni <sni> [options]
 
 Test SNI domain suitability for VLESS+REALITY protocol.
 
 Arguments:
-  <domain>                      Domain to test (required)
+  <sni>                         TLS server name to test (required)
 
 Options:
   --port <port>                 Port to test (default: 443)
+  --target <host:port>          Actual REALITY destination (default: <sni>:443)
   --json                        Output in JSON format
   --help, -h                    Show this help
 
 Checks performed:
   - TLS 1.3 support
   - HTTP/2 support
-  - Cross-domain redirect detection
+  - Redirect detection on the same target
 
 Examples:
-  # Test default SNI
-  xrf test-sni www.microsoft.com
+  # Probe the host and SNI that will be configured
+  xrf test-sni example.com --target example.com:443
 
   # Test with custom port
   xrf test-sni example.com --port 8443
 
   # JSON output
-  xrf test-sni www.cloudflare.com --json
+  xrf test-sni example.com --json
 
 EOF
 }
@@ -39,14 +40,19 @@ EOF
 main() {
   core::init "${@}"
 
-  local domain=""
+  local domain="" target="" port_set=false
   local port="443"
 
   # Parse arguments
   while [[ $# -gt 0 ]]; do
     case "${1}" in
       --port)
-        port="${2:-443}"
+        port="${2:-}"
+        port_set=true
+        shift 2
+        ;;
+      --target)
+        target="${2:-}"
         shift 2
         ;;
       --json)
@@ -83,8 +89,17 @@ main() {
     exit 1
   fi
 
+  if [[ -n "${target}" ]]; then
+    if [[ "${port_set}" == true || ! "${target}" =~ ^[^:]+:[0-9]+$ ]]; then
+      core::log error "use a single target host:port or --port" '{}'
+      exit 1
+    fi
+    port="${target##*:}"
+    target="${target%%:*}"
+  fi
+
   # Run validation
-  if sni::validate "${domain}" "${port}"; then
+  if sni::validate "${domain}" "${port}" "${target:-${domain}}"; then
     exit 0
   else
     exit 1

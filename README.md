@@ -1,35 +1,27 @@
 # Xray-Fusion
 
-One-command Xray proxy deployment with automatic certificate management.
+One-command VLESS + REALITY + Vision deployment with private client credentials.
 
-[![Tests](https://github.com/xrf9268-hue/xray/actions/workflows/test.yml/badge.svg)](https://github.com/xrf9268-hue/xray/actions/workflows/test.yml)
+[![Tests](https://github.com/zjlgdx/xray/actions/workflows/test.yml/badge.svg)](https://github.com/zjlgdx/xray/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ## Quick Start
 
-```bash
-# Install (no domain required)
-curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/install.sh | bash -s -- --topology reality-only
-
-# View connection links
-xrf links
-
-# Check status
-xrf status
-```
-
-That's it! Copy the link to your client app and connect.
-
-## With Your Own Domain
-
-If you have a domain with DNS pointing to your server:
+Choose a REALITY target that you have verified with `xrf test-sni`. Set its SNI
+explicitly; `XRAY_REALITY_DEST` defaults to `<XRAY_SNI>:443`. The diagnostic checks
+the actual target host and port with that SNI for TLS 1.3, HTTP/2, and redirects.
+It is advisory: installation validates local inputs and Xray configuration, not
+live reachability of an external site.
 
 ```bash
-curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/install.sh | bash -s -- \
-  --topology vision-reality \
-  --domain your.domain.com \
-  --plugins cert-auto
+export XRAY_SNI=your-verified-target.example
+curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash -s -- --yes
+sudo xrf links
+sudo xrf status
 ```
+
+A fresh install uses the newest published non-draft Xray release, including
+prereleases. Existing installations use `sudo xrf upgrade --version latest`.
 
 ## Commands
 
@@ -40,7 +32,8 @@ curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/install.sh | ba
 | `xrf logs` | View logs |
 | `xrf health` | Health check |
 | `xrf upgrade --version vX.Y.Z` | Upgrade the core while preserving configuration |
-| `xrf export` | Export configs (`uri/v2rayn/clash/sub/qr/all`) |
+| `xrf backup` | Create, verify, list, and restore configuration backups |
+| `xrf test-sni` | Diagnose an explicit REALITY target |
 | `xrf uninstall` | Remove installation |
 
 ## Uninstall
@@ -98,14 +91,8 @@ Do not substitute a request through a different proxy or a direct VPS curl for t
 
 ### Logging during configuration changes
 
-Configuration rendering preserves the existing `00_log.json` log object. Explicit
-`XRAY_LOG_LEVEL`, `XRAY_ACCESS_LOG`, and `XRAY_ERROR_LOG` environment variables override
-only their corresponding fields; an empty log path explicitly selects stdout.
-Fresh installs retain the previous warning-only default with access logging disabled.
-
-For file logging, provision a writable directory for the `xray` system user (for example,
-a systemd drop-in with `LogsDirectory=xray`, compatible with `ProtectSystem=strict`),
-restrict log permissions, and configure logrotate separately. Changing a path alone
-does not create its directory or bypass the service sandbox. Debug logging is for a
-bounded diagnostic session; lower it to info after reproducing the fault. A logrotate
-size threshold is checked on invocation, not continuously; choose an appropriate timer.
+Xray access and error output goes to stdout/stderr and is collected by systemd's
+journal. Use `sudo xrf logs` or `journalctl -u xray.service`. Journald owns
+retention and rotation; this tool does not create file logs or logrotate jobs.
+Configure `XRAY_LOG_LEVEL` for a bounded diagnostic session, then return it to
+the normal level.

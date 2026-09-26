@@ -9,7 +9,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "${HERE}/lib/health_check.sh"
 . "${HERE}/lib/x25519.sh"
 . "${HERE}/modules/state.sh"
-. "${HERE}/modules/net/sysctl.sh"
 . "${HERE}/services/xray/common.sh"
 
 usage() {
@@ -112,7 +111,6 @@ install::run_fresh() {
     --arg fp "${XRAY_FINGERPRINT:-chrome}" \
     '{name:"reality-only",version:$ver,installed_at:$ts,xray:{port:$port,uuid:$uuid,reality_sni:$sni,short_id:$sid,reality_public_key:$pbk,fingerprint:$fp}}')" || return 1
   state::save "${state}" || return 1
-  net::apply_sysctl_tuning || core::log warn "sysctl tuning skipped" '{}'
   "${HERE}/services/xray/client-links.sh" || core::log warn "connection link unavailable; run xrf links after resolving server IP" '{}'
   if ! health::run; then
     core::log warn "health check failed" '{"suggestion":"run xrf health to diagnose issues"}'

@@ -54,79 +54,25 @@ teardown() {
 }
 
 # ==============================================================================
-# error_codes::invalid_domain Tests
-# ==============================================================================
-
-@test "error_codes::invalid_domain - basic usage" {
-  export XRF_JSON="false"
-
-  run error_codes::invalid_domain "192.168.1.1"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"XRF-CONFIG-001"* ]]
-  [[ "${output}" == *"192.168.1.1"* ]]
-  [[ "${output}" == *"Invalid domain"* ]]
-}
-
-@test "error_codes::invalid_domain - with specific reason" {
-  export XRF_JSON="false"
-
-  run error_codes::invalid_domain "192.168.1.1" "RFC 1918 private IP"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"RFC 1918 private IP"* ]]
-}
-
-@test "error_codes::invalid_domain - includes examples" {
-  export XRF_JSON="false"
-
-  run error_codes::invalid_domain "test.local"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"xrf install"* ]]
-  [[ "${output}" == *"--topology"* ]]
-}
-
-# ==============================================================================
-# error_codes::invalid_topology Tests
-# ==============================================================================
-
-@test "error_codes::invalid_topology - basic usage" {
-  export XRF_JSON="false"
-
-  run error_codes::invalid_topology "invalid-topo"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"XRF-CONFIG-002"* ]]
-  [[ "${output}" == *"invalid-topo"* ]]
-  [[ "${output}" == *"Invalid topology"* ]]
-}
-
-@test "error_codes::invalid_topology - suggests valid options" {
-  export XRF_JSON="false"
-
-  run error_codes::invalid_topology "wrong"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"reality-only"* ]]
-  [[ "${output}" == *"vision-reality"* ]]
-}
-
-# ==============================================================================
 # error_codes::missing_parameter Tests
 # ==============================================================================
 
 @test "error_codes::missing_parameter - basic usage" {
   export XRF_JSON="false"
 
-  run error_codes::missing_parameter "domain"
+  run error_codes::missing_parameter "topology"
   [ "$status" -eq 1 ]
   [[ "${output}" == *"XRF-CONFIG-003"* ]]
-  [[ "${output}" == *"--domain"* ]]
+  [[ "${output}" == *"--topology"* ]]
   [[ "${output}" == *"Missing required parameter"* ]]
 }
 
 @test "error_codes::missing_parameter - with context" {
   export XRF_JSON="false"
 
-  run error_codes::missing_parameter "domain" "vision-reality topology"
+  run error_codes::missing_parameter "topology" "REALITY install"
   [ "$status" -eq 1 ]
-  [[ "${output}" == *"vision-reality topology"* ]]
+  [[ "${output}" == *"REALITY install"* ]]
 }
 
 # ==============================================================================
@@ -149,20 +95,6 @@ teardown() {
   run error_codes::port_conflict "443" "nginx"
   [ "$status" -eq 1 ]
   [[ "${output}" == *"nginx"* ]]
-}
-
-# ==============================================================================
-# error_codes::cert_not_found Tests
-# ==============================================================================
-
-@test "error_codes::cert_not_found - basic usage" {
-  export XRF_JSON="false"
-
-  run error_codes::cert_not_found "/path/to/cert.pem"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"XRF-CERT-001"* ]]
-  [[ "${output}" == *"/path/to/cert.pem"* ]]
-  [[ "${output}" == *"Certificate not found"* ]]
 }
 
 # ==============================================================================
@@ -224,36 +156,22 @@ teardown() {
 }
 
 # ==============================================================================
-# error_codes::plugin_not_found Tests
-# ==============================================================================
-
-@test "error_codes::plugin_not_found - basic usage" {
-  export XRF_JSON="false"
-
-  run error_codes::plugin_not_found "nonexistent"
-  [ "$status" -eq 1 ]
-  [[ "${output}" == *"XRF-PLUGIN-001"* ]]
-  [[ "${output}" == *"nonexistent"* ]]
-  [[ "${output}" == *"Plugin not found"* ]]
-}
-
-# ==============================================================================
 # Integration Tests
 # ==============================================================================
 
 @test "integration - text vs JSON output consistency" {
   # Test same error in both formats
   export XRF_JSON="false"
-  run error_codes::invalid_domain "192.168.1.1"
+  run error_codes::port_conflict "443"
   local text_output="${output}"
 
   export XRF_JSON="true"
-  run error_codes::invalid_domain "192.168.1.1"
+  run error_codes::port_conflict "443"
   local json_output="${output}"
 
-  # Both should contain domain value
-  [[ "${text_output}" == *"192.168.1.1"* ]]
-  [[ "${json_output}" == *"192.168.1.1"* ]]
+  # Both should contain the same port value
+  [[ "${text_output}" == *"443"* ]]
+  [[ "${json_output}" == *"443"* ]]
 
   # JSON should be valid JSON (contains braces)
   [[ "${json_output}" == *"{"* ]]
@@ -267,10 +185,10 @@ teardown() {
   # Collect error codes
   export XRF_JSON="true"
 
-  run error_codes::invalid_domain "test"
+  run error_codes::xray_config_invalid "test"
   codes+=("$(echo "${output}" | grep -o 'XRF-[A-Z]*-[0-9]*' | head -1)")
 
-  run error_codes::invalid_topology "test"
+  run error_codes::invalid_uuid "test"
   codes+=("$(echo "${output}" | grep -o 'XRF-[A-Z]*-[0-9]*' | head -1)")
 
   run error_codes::missing_parameter "test"

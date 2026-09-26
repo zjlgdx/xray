@@ -9,15 +9,8 @@
 [[ -n "${_XRF_DEFAULTS_LOADED:-}" ]] && return 0
 readonly _XRF_DEFAULTS_LOADED=1
 
-# === Topology Defaults ===
-readonly DEFAULT_TOPOLOGY="reality-only"
-
 # === Port Defaults ===
 readonly DEFAULT_XRAY_PORT=443
-
-# === Certificate Defaults ===
-readonly DEFAULT_CADDY_CERT_BASE="/root/.local/share/caddy/certificates"
-readonly DEFAULT_XRAY_CERT_DIR="/usr/local/etc/xray/certs"
 
 # === Reality Protocol Defaults ===
 readonly DEFAULT_XRAY_SNIFFING="true"

@@ -18,7 +18,6 @@ Checks performed:
   - Service Status    (systemd unit status)
   - Configuration     (xray config validation)
   - Network           (port listening checks)
-  - Certificates      (validity check for vision-reality)
   - Compatibility     (deprecated setting warnings)
 
 Examples:

@@ -8,15 +8,12 @@ setup() {
 }
 teardown() { cleanup_test_env; }
 
-@test "default install topology and version are REALITY and latest" {
-  [ "$TOPOLOGY" = reality-only ]
+@test "default install version is latest" {
   [ "$VERSION" = latest ]
 }
 
-@test "the only accepted topology is reality-only" {
+@test "retired topology is rejected" {
   run args::parse --topology reality-only
-  [ "$status" -eq 0 ]
-  run args::parse --topology vision-reality
   [ "$status" -ne 0 ]
 }
 

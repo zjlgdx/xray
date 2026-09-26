@@ -17,7 +17,6 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Initialize default values
 args::init() {
-  TOPOLOGY="${DEFAULT_TOPOLOGY}"
   VERSION="${DEFAULT_VERSION}"
   DEBUG="${DEFAULT_XRF_DEBUG}"
   UUID=""
@@ -31,11 +30,6 @@ args::init() {
 args::parse() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --topology | -t)
-        args::validate_topology "${2:-}" || return 1
-        TOPOLOGY="${2}"
-        shift 2
-        ;;
       --fingerprint | -f)
         args::validate_fingerprint "${2:-}" || return 1
         FINGERPRINT="${2}"
@@ -88,28 +82,9 @@ args::parse() {
   fi
 
   # Export variables for use by other modules
-  export TOPOLOGY VERSION DEBUG UUID UUID_FROM_STRING XRF_YES XRF_DRY_RUN FINGERPRINT
+  export VERSION DEBUG UUID UUID_FROM_STRING XRF_YES XRF_DRY_RUN FINGERPRINT
 
   return 0
-}
-
-# Topology validation
-args::validate_topology() {
-  local topology="${1:-}"
-  if [[ -z "${topology}" ]]; then
-    error_codes::missing_parameter "topology" ""
-    return 1
-  fi
-
-  case "${topology}" in
-    reality-only)
-      return 0
-      ;;
-    *)
-      error_codes::invalid_topology "${topology}"
-      return 1
-      ;;
-  esac
 }
 
 # Version validation
@@ -150,7 +125,6 @@ args::validate_fingerprint() {
 args::show_help() {
   cat << EOF
 Options:
-  --topology, -t reality-only   REALITY installation (default)
   --fingerprint, -f <type>      TLS fingerprint (default: chrome)
                                 Valid: chrome, firefox, safari, ios, android, edge, 360, qq, random, randomized
   --version, -v <version>       Xray version to install (default: latest)
@@ -162,14 +136,11 @@ Options:
   --help, -h                    Show this help
 
 Examples:
-  # Reality-only topology
-  --topology reality-only
-
   # Preview without installing
-  --topology reality-only --dry-run
+  --dry-run
 
   # Auto-confirm installation
-  --topology reality-only --yes
+  --yes
 
   # Specific version
   --version v1.8.1
@@ -180,8 +151,8 @@ EOF
 # Show current configuration (debug helper)
 args::show_config() {
   if [[ "${DEBUG}" == "true" ]]; then
-    core::log debug "parsed arguments" "$(printf '{"topology":"%s","version":"%s","fingerprint":"%s","debug":"%s"}' \
-      "${TOPOLOGY}" "${VERSION}" "${FINGERPRINT}" "${DEBUG}")"
+    core::log debug "parsed arguments" "$(printf '{"version":"%s","fingerprint":"%s","debug":"%s"}' \
+      "${VERSION}" "${FINGERPRINT}" "${DEBUG}")"
   fi
 }
 

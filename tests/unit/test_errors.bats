@@ -61,11 +61,6 @@ teardown() {
   [ "${result}" = "Help requested" ]
 }
 
-@test "errors::message returns Invalid domain for ERR_INVALID_DOMAIN" {
-  result="$(errors::message "${ERR_INVALID_DOMAIN}")"
-  [ "${result}" = "Invalid domain" ]
-}
-
 @test "errors::message returns Invalid port for ERR_INVALID_PORT" {
   result="$(errors::message "${ERR_INVALID_PORT}")"
   [ "${result}" = "Invalid port" ]
@@ -84,26 +79,6 @@ teardown() {
 @test "errors::message returns Invalid version for ERR_INVALID_VERSION" {
   result="$(errors::message "${ERR_INVALID_VERSION}")"
   [ "${result}" = "Invalid version" ]
-}
-
-@test "errors::message returns Invalid topology for ERR_INVALID_TOPOLOGY" {
-  result="$(errors::message "${ERR_INVALID_TOPOLOGY}")"
-  [ "${result}" = "Invalid topology" ]
-}
-
-@test "errors::message returns Plugin not found for ERR_PLUGIN_NOT_FOUND" {
-  result="$(errors::message "${ERR_PLUGIN_NOT_FOUND}")"
-  [ "${result}" = "Plugin not found" ]
-}
-
-@test "errors::message returns Plugin load failed for ERR_PLUGIN_LOAD_FAIL" {
-  result="$(errors::message "${ERR_PLUGIN_LOAD_FAIL}")"
-  [ "${result}" = "Plugin load failed" ]
-}
-
-@test "errors::message returns Plugin hook failed for ERR_PLUGIN_HOOK_FAIL" {
-  result="$(errors::message "${ERR_PLUGIN_HOOK_FAIL}")"
-  [ "${result}" = "Plugin hook failed" ]
 }
 
 @test "errors::message returns Service start failed for ERR_SERVICE_START_FAIL" {

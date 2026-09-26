@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # xray-fusion online installer
-# Usage: curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/install.sh | bash -s -- [options]
+# Usage: curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | bash -s -- [options]
 
 set -euo pipefail
 
@@ -12,24 +12,19 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-REPO_URL="${XRF_REPO_URL:-https://github.com/xrf9268-hue/xray.git}"
+REPO_URL="${XRF_REPO_URL:-https://github.com/zjlgdx/xray.git}"
 BRANCH="${XRF_BRANCH:-main}"
 INSTALL_DIR="${XRF_INSTALL_DIR:-/usr/local/xray-fusion}"
 
 # Runtime variables (will be set by args::parse)
-TOPOLOGY=""
-DOMAIN=""
 VERSION=""
-PLUGINS=""
 DEBUG=""
 PROXY=""
 XRF_YES="false"
 ALLOW_UNSIGNED_TAG="${XRF_ALLOW_UNSIGNED_TAG:-false}"
 EXPECTED_COMMIT=""
 DOWNLOAD_COMMIT=""
-TARBALL_ROOT_DIR=""
 INTEGRITY_VERIFIED="false"
-REF_TYPE="heads"
 REQUIRE_SIGNED_TAG="false"
 
 SYMLINK_PATH="/usr/local/bin/xrf"
@@ -180,25 +175,8 @@ check_dependencies() {
 
   local missing=()
 
-  # Check downloader availability (need at least one)
-  local has_downloader=false
-  for tool in git curl wget; do
-    if command -v "${tool}" > /dev/null 2>&1; then
-      has_downloader=true
-      log_debug "Found download tool: ${tool}"
-      break
-    fi
-  done
-
-  if [[ "${has_downloader}" == "false" ]]; then
-    log_error "Need at least one download tool: git, curl, or wget"
-    missing+=("git or curl or wget")
-  fi
-
-  # Check basic utilities
-  for tool in mktemp tar gzip; do
+  for tool in git mktemp; do
     if ! command -v "${tool}" > /dev/null 2>&1; then
-      log_warn "Missing tool: ${tool}"
       missing+=("${tool}")
     fi
   done
@@ -210,13 +188,13 @@ check_dependencies() {
     echo "Please install missing tools for your system:"
     echo ""
     echo "# Debian/Ubuntu"
-    echo "sudo apt-get update && sudo apt-get install -y git curl wget tar gzip"
+    echo "sudo apt-get update && sudo apt-get install -y git mktemp"
     echo ""
     echo "# CentOS/RHEL/Rocky"
-    echo "sudo yum install -y git curl wget tar gzip"
+    echo "sudo yum install -y git mktemp"
     echo ""
     echo "# Arch Linux"
-    echo "sudo pacman -S git curl wget tar gzip"
+    echo "sudo pacman -S git mktemp"
     echo ""
     return 1
   fi
@@ -246,43 +224,25 @@ source_args_module() {
 
 # Initialize default values
 args::init() {
-  TOPOLOGY="reality-only"
-  DOMAIN=""
   VERSION="latest"
-  PLUGINS=""
   DEBUG="false"
   XRF_YES="false"
   ALLOW_UNSIGNED_TAG="${XRF_ALLOW_UNSIGNED_TAG:-false}"
 }
 
-# Parse command line arguments
 args::parse() {
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --topology|-t)
-        args::validate_topology "${2:-}" || return 1
-        TOPOLOGY="${2}"
-        shift 2
-        ;;
-      --domain|-d)
-        args::validate_domain "${2:-}" || return 1
-        DOMAIN="${2}"
-        shift 2
-        ;;
       --version|-v)
         args::validate_version "${2:-}" || return 1
         VERSION="${2}"
-        shift 2
-        ;;
-      --plugins|-p)
-        PLUGINS="${2:-}"
         shift 2
         ;;
       --proxy)
         PROXY="${2:-}"
         shift 2
         ;;
-      --allow-unsigned-release|--allow-unsigned-tag)
+      --allow-unsigned-release)
         ALLOW_UNSIGNED_TAG="true"
         shift
         ;;
@@ -301,118 +261,20 @@ args::parse() {
       --help|-h)
         return 10
         ;;
-      --)
-        shift
-        break
-        ;;
       *)
         log_error "Unknown argument: ${1}"
         return 1
         ;;
     esac
   done
-
-  # Validate configuration
-  args::validate_config || return 1
-  return 0
-}
-
-# Validation functions
-args::validate_topology() {
-  local topology="${1:-}"
-  [[ -n "${topology}" ]] || { log_error "Topology cannot be empty"; return 1; }
-  case "${topology}" in
-    reality-only|vision-reality) return 0 ;;
-    *) log_error "Invalid topology: ${topology}. Must be 'reality-only' or 'vision-reality'"; return 1 ;;
-  esac
-}
-
-##
-# Validate domain name (RFC-compliant)
-#
-# This is a standalone version that mirrors lib/validators.sh::validators::domain()
-# to ensure install.sh can validate domains without dependencies.
-#
-# IMPORTANT: Keep this in sync with lib/validators.sh for consistent security.
-#
-# Checks:
-# - RFC 1035: Format and length restrictions
-# - RFC 1918: Private IPv4 networks
-# - RFC 3927: Link-local addresses (169.254.0.0/16)
-# - RFC 6761: Special-use domain names (.test, .invalid)
-# - RFC 4193/4291: IPv6 private/link-local addresses
-##
-args::validate_domain() {
-  local domain="${1:-}"
-
-  # Empty domain is allowed (optional parameter)
-  [[ -z "${domain}" ]] && return 0
-
-  # Length check (DNS specification: total length <= 253)
-  if [[ ${#domain} -gt 253 ]]; then
-    log_error "Domain too long (max 253 characters): ${domain}"
-    return 1
-  fi
-
-  # RFC 1035 compliant format
-  if [[ ! "${domain}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$ ]]; then
-    log_error "Invalid domain format (RFC 1035): ${domain}"
-    return 1
-  fi
-
-  # Reject private/internal/special-use domains
-  case "${domain}" in
-    # Loopback and special addresses
-    localhost|*.local|127.*|0.0.0.0)
-      log_error "Loopback/local domain not allowed: ${domain}"
-      return 1
-      ;;
-    # RFC 1918 private networks
-    10.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|192.168.*)
-      log_error "RFC 1918 private network not allowed: ${domain}"
-      return 1
-      ;;
-    # RFC 3927 link-local addresses
-    169.254.*)
-      log_error "RFC 3927 link-local address not allowed: ${domain}"
-      return 1
-      ;;
-    # RFC 6761 special-use domain names
-    *.test|*.invalid)
-      log_error "RFC 6761 special-use TLD not allowed: ${domain}"
-      return 1
-      ;;
-  esac
-
-  # IPv6 private address detection (RFC 4193, RFC 4291)
-  # - ::1 (loopback)
-  # - fc00::/7 and fd00::/8 (unique local addresses - RFC 4193)
-  # - fe80::/10 (link-local - RFC 4291)
-  if [[ "${domain}" =~ ^::1$ ]] \
-    || [[ "${domain}" =~ ^[fF][cCdD][0-9a-fA-F]{2}: ]] \
-    || [[ "${domain}" =~ ^[fF][eE]80: ]]; then
-    log_error "IPv6 private/link-local address not allowed: ${domain}"
-    return 1
-  fi
-
-  return 0
 }
 
 args::validate_version() {
   local version="${1:-}"
-  [[ -n "${version}" ]] || { log_error "Version cannot be empty"; return 1; }
-  [[ "${version}" == "latest" ]] && return 0
-  [[ "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
-    log_error "Invalid version format: ${version}. Use 'latest' or 'vX.Y.Z'"
+  [[ "${version}" == latest || "${version}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    log_error "Invalid version format: ${version}. Use latest or vX.Y.Z"
     return 1
   }
-}
-
-args::validate_config() {
-  if [[ "${TOPOLOGY}" == "vision-reality" && -z "${DOMAIN}" ]]; then
-    log_error "Vision-reality topology requires --domain parameter"
-    return 1
-  fi
 }
 
 # Show help
@@ -421,44 +283,24 @@ args::show_help() {
 xray-fusion online installer
 
 Usage:
-  curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/install.sh | bash -s -- [options]
+  XRAY_SNI=example.com curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash -s -- [options]
 
 Options:
-  --topology, -t <type>         Installation topology (reality-only|vision-reality)
-  --domain, -d <domain>         Domain for vision-reality topology (required)
-  --version, -v <version>       Xray version to install (default: latest)
-  --plugins, -p <list>          Comma-separated list of plugins to enable
-  --proxy <url>                 Use proxy for downloads
-  --install-dir <path>          Installation directory (default: /usr/local/xray-fusion)
+  --version, -v <version>       Xray version (default: newest published release)
+  --proxy <url>                 Proxy for repository download
+  --install-dir <path>          Tool directory (default: /usr/local/xray-fusion)
   --allow-unsigned-release      Skip required GPG verification for tagged releases
-  --yes, -y                     Auto-confirm installation (skip prompt)
+  --yes, -y                     Auto-confirm fresh installation
   --debug                       Enable debug output
   --help, -h                    Show this help
 
-Examples:
-  # Reality-only installation
-  curl -sL install.sh | bash -s -- --topology reality-only
-
-  # Vision-Reality with domain and plugins
-  curl -sL install.sh | bash -s -- --topology vision-reality --domain your.domain.com --plugins cert-auto
-
-  # Specific version
-  curl -sL install.sh | bash -s -- --topology reality-only --version v1.8.1
-
-  # Non-interactive installation
-  curl -sL install.sh | bash -s -- --topology reality-only --yes
-
-Environment Variables:
-  XRF_REPO_URL      Repository URL (default: https://github.com/xrf9268-hue/xray.git)
-  XRF_BRANCH        Branch to use (default: main)
-  XRF_INSTALL_DIR   Installation directory (default: /usr/local/xray-fusion)
-
-Xray Configuration Variables:
-  XRAY_SNI          SNI domain (default: www.apple.com)
-  XRAY_PORT         Listen port (default: 443)
-  XRAY_UUID         User UUID (auto-generated if not set)
-  XRAY_*            All other Xray configuration variables
-
+Environment:
+  XRAY_SNI          Required REALITY server name
+  XRAY_REALITY_DEST Actual REALITY target (default: XRAY_SNI:443)
+  XRF_REPO_URL      Repository URL (default: https://github.com/zjlgdx/xray.git)
+  XRF_BRANCH        Branch or tag to use (default: main)
+  XRF_INSTALL_DIR   Tool directory (default: /usr/local/xray-fusion)
+  XRF_EXPECTED_COMMIT Optional pinned 40-hex commit for download integrity
 EOF
 }
 ARGS_EOF
@@ -489,19 +331,11 @@ parse_args() {
 
 # Setup environment from parsed arguments
 setup_environment() {
-  # Set XRAY_DOMAIN for Xray configuration
-  if [[ -n "${DOMAIN}" ]]; then
-    export XRAY_DOMAIN="${DOMAIN}"
+  if [[ "${DEBUG}" == true ]]; then
+    export XRF_DEBUG=true
   fi
-
-  # Set debug mode
-  if [[ "${DEBUG}" == "true" ]]; then
-    export XRF_DEBUG="true"
-  fi
-
-  REF_TYPE="$(detect_ref_type "${BRANCH}")"
-  if [[ "$(is_tagged_ref "${BRANCH}")" == "true" && "${ALLOW_UNSIGNED_TAG}" != "true" ]]; then
-    REQUIRE_SIGNED_TAG="true"
+  if [[ "$(is_tagged_ref "${BRANCH}")" == true && "${ALLOW_UNSIGNED_TAG}" != true ]]; then
+    REQUIRE_SIGNED_TAG=true
   fi
 }
 
@@ -550,7 +384,7 @@ check_system() {
 install_dependencies() {
   log_info "Installing dependencies..."
 
-  local deps="curl wget git jq unzip openssl"
+  local deps="curl git jq unzip openssl"
   local missing_deps=""
   local pkg_manager=""
 
@@ -621,95 +455,29 @@ detect_ref_type() {
   echo "heads"
 }
 
-extract_commit_from_tar_root() {
-  local root_name="${1:-}"
-  [[ "${root_name}" =~ -([0-9a-fA-F]{40})$ ]] || return 1
-  echo "${BASH_REMATCH[1]}"
-  return 0
-}
-
-extract_repo_slug() {
-  local url="${1:-}"
-  if [[ "${url}" =~ github\.com[:/]+([^/]+)/([^/.]+)(\.git)?$ ]]; then
-    echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
-    return 0
-  fi
-  return 1
-}
-
 fetch_expected_commit() {
   if [[ -n "${EXPECTED_COMMIT}" ]]; then
     return 0
   fi
-
   if [[ -n "${XRF_EXPECTED_COMMIT:-}" ]]; then
     EXPECTED_COMMIT="${XRF_EXPECTED_COMMIT}"
-    if [[ ! "${EXPECTED_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]; then
-      log_error "Invalid XRF_EXPECTED_COMMIT format; must be 40-hex commit hash"
-      return 1
-    fi
-    return 0
-  fi
-
-  local slug
-  if ! slug="$(extract_repo_slug "${REPO_URL}")"; then
-    log_error "XRF_EXPECTED_COMMIT is required when repository is not hosted on GitHub"
-    return 1
-  fi
-
-  local api_url="https://api.github.com/repos/${slug}/commits/${BRANCH}"
-  local response=""
-  log_info "Fetching expected commit from GitHub API (${BRANCH})"
-
-  # Try GitHub API with retries (3 attempts, exponential backoff)
-  local attempt=0
-  local max_retries=3
-  local delay=2
-  while [[ ${attempt} -lt ${max_retries} ]]; do
-    attempt=$((attempt + 1))
-    log_debug "GitHub API attempt ${attempt}/${max_retries}"
-
-    if command -v curl > /dev/null 2>&1; then
-      response="$(curl -fsSL --connect-timeout 10 --max-time 30 \
-        -H "Accept: application/vnd.github.v3+json" \
-        "${api_url}" 2> /dev/null || true)"
-    elif command -v wget > /dev/null 2>&1; then
-      response="$(wget -qO- --timeout=30 \
-        --header="Accept: application/vnd.github.v3+json" \
-        "${api_url}" 2> /dev/null || true)"
+  else
+    local ref output
+    if [[ "$(detect_ref_type "${BRANCH}")" == tags ]]; then
+      ref="refs/tags/${BRANCH}"
+      output="$(git ls-remote "${REPO_URL}" "${ref}" "${ref}^{}")" || return 1
+      EXPECTED_COMMIT="$(printf '%s\n' "${output}" | awk -v peeled="${ref}^{}" -v tag="${ref}" '$2 == peeled {print $1; found=1; exit} $2 == tag {unpeeled=$1} END {if (!found && unpeeled != "") print unpeeled}')"
     else
-      log_error "No HTTP client available to fetch expected commit (need curl or wget)"
-      return 1
-    fi
-
-    EXPECTED_COMMIT="$(echo "${response}" | grep -m1 -oE '"sha"[[:space:]]*:[[:space:]]*"[0-9a-f]{40}"' | head -1 | grep -oE '[0-9a-f]{40}' || true)"
-    if [[ "${EXPECTED_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-      break
-    fi
-
-    if [[ ${attempt} -lt ${max_retries} ]]; then
-      log_warn "GitHub API attempt ${attempt} failed, retrying in ${delay}s..."
-      sleep "${delay}"
-      delay=$((delay * 2))
-    fi
-  done
-
-  # Fallback to git ls-remote if API failed
-  if [[ ! "${EXPECTED_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-    log_warn "GitHub API failed after ${max_retries} attempts, trying git ls-remote..."
-    if command -v git > /dev/null 2>&1; then
-      EXPECTED_COMMIT="$(git ls-remote "${REPO_URL}" "refs/heads/${BRANCH}" 2> /dev/null | awk '{print $1}' || true)"
+      ref="refs/heads/${BRANCH}"
+      output="$(git ls-remote "${REPO_URL}" "${ref}")" || return 1
+      EXPECTED_COMMIT="$(printf '%s\n' "${output}" | awk -v ref="${ref}" '$2 == ref {print $1; exit}')"
     fi
   fi
-
-  if [[ ! "${EXPECTED_COMMIT}" =~ ^[0-9a-f]{40}$ ]]; then
-    log_error "Failed to determine expected commit from GitHub API and git ls-remote"
-    log_error "Set XRF_EXPECTED_COMMIT manually to continue after verifying the correct hash"
+  if [[ ! "${EXPECTED_COMMIT}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+    log_error "Invalid or unavailable expected commit; set a verified XRF_EXPECTED_COMMIT"
     return 1
   fi
-
   log_info "Expected commit: ${EXPECTED_COMMIT}"
-  return 0
 }
 
 enforce_integrity_checks() {
@@ -719,13 +487,13 @@ enforce_integrity_checks() {
   local require_signature="${4:-false}"
 
   if [[ -z "${expected_commit}" ]]; then
-    log_error "Missing expected commit for verification (set XRF_EXPECTED_COMMIT or ensure GitHub API is reachable)"
+    log_error "Missing expected commit for verification (set XRF_EXPECTED_COMMIT or make git ls-remote available)"
     return 1
   fi
 
   if [[ -z "${actual_commit}" ]]; then
     log_error "Unable to determine downloaded commit hash for verification"
-    log_error "Ensure git metadata is available or retry with git-based download"
+    log_error "Ensure git metadata is available"
     return 1
   fi
 
@@ -773,120 +541,22 @@ enforce_integrity_checks() {
 
 # Download xray-fusion
 download_project() {
-  log_info "Downloading xray-fusion from ${REPO_URL} (branch: ${BRANCH})..."
-
-  log_debug "Using temporary directory: ${TMP_DIR}"
-
-  # Set proxy if specified
+  log_info "Cloning xray-fusion from ${REPO_URL} (ref: ${BRANCH})..."
   if [[ -n "${PROXY}" ]]; then
-    export https_proxy="${PROXY}"
-    export http_proxy="${PROXY}"
-    log_info "Using proxy: ${PROXY}"
+    export https_proxy="${PROXY}" http_proxy="${PROXY}"
+  fi
+  if ! git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${TMP_DIR}/xray-fusion"; then
+    error_exit "Repository clone failed"
   fi
 
-  # Download with automatic fallback (git → tarball)
-  log_debug "Starting download..."
-
-  # Try git clone first (preferred) with retry
-  local download_success=false
-  if command -v git > /dev/null 2>&1; then
-    log_debug "Attempting git clone (max 3 retries)..."
-    if retry_command 3 2 git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${TMP_DIR}/xray-fusion"; then
-      log_debug "git clone succeeded"
-      download_success=true
-    else
-      log_warn "git clone failed, trying tarball download..."
-    fi
-  else
-    log_debug "git not available, using tarball download"
-  fi
-
-  # Fallback to tarball if git failed
-  if [[ "${download_success}" == "false" ]]; then
-    local tarball_url="${REPO_URL%.git}/archive/refs/${REF_TYPE}/${BRANCH}.tar.gz"
-    local tarball="${TMP_DIR}/archive.tar.gz"
-    local tar_root=""
-
-    log_debug "Downloading tarball: ${tarball_url}"
-
-    # Try curl first with retry
-    if command -v curl > /dev/null 2>&1; then
-      if retry_command 3 2 curl -fsSL --connect-timeout 10 --max-time 300 "${tarball_url}" -o "${tarball}"; then
-        log_debug "tarball download succeeded (curl)"
-        download_success=true
-      else
-        log_warn "curl download failed (after retries)"
-        rm -f "${tarball}"
-      fi
-    fi
-
-    # Fallback to wget with retry
-    if [[ "${download_success}" == "false" ]] && command -v wget > /dev/null 2>&1; then
-      if retry_command 3 2 wget -q --timeout=10 "${tarball_url}" -O "${tarball}"; then
-        log_debug "tarball download succeeded (wget)"
-        download_success=true
-      else
-        log_warn "wget download failed (after retries)"
-        rm -f "${tarball}"
-      fi
-    fi
-
-    # Extract tarball if downloaded
-    if [[ "${download_success}" == "true" ]]; then
-      tar_root=$(tar -tzf "${tarball}" | head -1 | cut -d/ -f1 2> /dev/null || true)
-      log_debug "Extracting tarball..."
-      if tar -xzf "${tarball}" -C "${TMP_DIR}" 2> /dev/null; then
-        # Rename extracted directory
-        mv "${TMP_DIR}/xray-fusion-${BRANCH}" "${TMP_DIR}/xray-fusion" 2> /dev/null \
-          || mv "${TMP_DIR}"/xray-fusion-* "${TMP_DIR}/xray-fusion" 2> /dev/null
-        rm -f "${tarball}"
-        TARBALL_ROOT_DIR="${tar_root}"
-      else
-        log_error "tarball extraction failed"
-        rm -f "${tarball}"
-        download_success=false
-      fi
-    fi
-  fi
-
-  # Check final result
-  if [[ "${download_success}" == "false" ]]; then
-    log_error "All download methods failed (git/curl/wget)"
-    log_info "Please check your network connection or try using a proxy"
-    error_exit "Download failed"
-  fi
-
-  # === Verify download integrity BEFORE sourcing any code ===
-  # Security: Verify BEFORE executing any downloaded code to prevent MITM attacks
-
-  # 1. Get actual commit hash (uses only system git, no downloaded code)
-  if ! fetch_expected_commit; then
-    error_exit "Unable to determine expected commit for verification"
-  fi
-
-  DOWNLOAD_COMMIT=""
-  if [[ -d "${TMP_DIR}/xray-fusion/.git" ]]; then
-    DOWNLOAD_COMMIT="$(git -C "${TMP_DIR}/xray-fusion" rev-parse HEAD 2> /dev/null || true)"
-  elif [[ -n "${TARBALL_ROOT_DIR}" ]]; then
-    if ! DOWNLOAD_COMMIT="$(extract_commit_from_tar_root "${TARBALL_ROOT_DIR}")"; then
-      DOWNLOAD_COMMIT=""
-    fi
-  fi
-  log_debug "Downloaded commit: ${DOWNLOAD_COMMIT:-unknown}"
-
+  # Verify the exact checkout before executing anything from it.
+  fetch_expected_commit || error_exit "Unable to determine expected commit"
+  DOWNLOAD_COMMIT="$(git -C "${TMP_DIR}/xray-fusion" rev-parse HEAD)" || error_exit "Unable to read cloned commit"
   if ! enforce_integrity_checks "${TMP_DIR}/xray-fusion" "${DOWNLOAD_COMMIT}" "${EXPECTED_COMMIT}" "${REQUIRE_SIGNED_TAG}"; then
     error_exit "Integrity verification failed (commit/GPG)"
   fi
-  INTEGRITY_VERIFIED="true"
-
-  # === END: Verification ===
-  # Note: Removed sourcing of lib/download.sh - all verification logic is self-contained
-
-  # Verify download completeness
-  if [[ ! -d "${TMP_DIR}/xray-fusion" ]] || [[ ! -f "${TMP_DIR}/xray-fusion/bin/xrf" ]]; then
-    error_exit "Downloaded files incomplete or corrupted"
-  fi
-
+  INTEGRITY_VERIFIED=true
+  [[ -f "${TMP_DIR}/xray-fusion/bin/xrf" ]] || error_exit "Downloaded files incomplete"
   log_info "Download completed"
 }
 
@@ -958,45 +628,20 @@ cleanup_partial_installation() {
 
 # Run xray installation
 run_xray_install() {
-  log_info "Installing Xray with topology: ${TOPOLOGY}"
-
-  local install_args=("--topology" "${TOPOLOGY}")
-
-  if [[ -n "${DOMAIN}" ]]; then
-    install_args+=("--domain" "${DOMAIN}")
-  fi
-
-  if [[ "${VERSION}" != "latest" ]]; then
-    install_args+=("--version" "${VERSION}")
-  fi
-
-  if [[ -n "${PLUGINS}" ]]; then
-    install_args+=("--plugins" "${PLUGINS}")
-  fi
-
-  if [[ "${DEBUG}" == "true" ]]; then
-    install_args+=("--debug")
-  fi
-
-  if [[ "${XRF_YES}" == "true" ]]; then
-    install_args+=("--yes")
-  fi
-
-  # Change to installation directory
+  log_info "Installing REALITY Xray for SNI ${XRAY_SNI}"
+  local install_args=()
+  [[ "${VERSION}" == latest ]] || install_args+=("--version" "${VERSION}")
+  [[ "${DEBUG}" == true ]] && install_args+=("--debug")
+  [[ "${XRF_YES}" == true ]] && install_args+=("--yes")
   cd "${INSTALL_DIR}"
-
-  if [[ "${INTEGRITY_VERIFIED}" != "true" ]]; then
+  if [[ "${INTEGRITY_VERIFIED}" != true ]]; then
     cleanup_partial_installation
-    error_exit "Integrity checks did not complete successfully; aborting execution of xrf"
+    error_exit "Integrity checks did not complete; refusing to execute xrf"
   fi
-
-  # Run installation with unified arguments
   if "./bin/xrf" install "${install_args[@]}"; then
     log_info "Xray installation completed successfully"
     [[ -n "${INSTALL_MARKER}" && -f "${INSTALL_MARKER}" ]] && rm -f "${INSTALL_MARKER}"
     INSTALL_MARKER=""
-
-    # Post-installation validation
     validate_installation
   else
     cleanup_partial_installation
@@ -1036,20 +681,12 @@ validate_installation() {
 # Show installation summary
 show_summary() {
   log_info "Installation Summary:"
-  echo "  Topology: ${TOPOLOGY}"
+  echo "  REALITY SNI: ${XRAY_SNI}"
   echo "  Version: ${VERSION}"
   echo "  Install Directory: ${INSTALL_DIR}"
-  [[ -n "${DOMAIN}" ]] && echo "  Domain: ${DOMAIN}"
-  [[ -n "${PLUGINS}" ]] && echo "  Enabled Plugins: ${PLUGINS}"
-  [[ -n "${XRAY_SNI:-}" ]] && echo "  Custom SNI: ${XRAY_SNI}"
-  [[ -n "${XRAY_PORT:-}" ]] && echo "  Custom Port: ${XRAY_PORT}"
-  echo ""
-  log_info "Next steps:"
   echo "  1. Check status: xrf status"
-  echo "  2. View client links: xrf links"
-  echo "  3. Manage plugins: xrf plugin list"
-  echo ""
-  log_info "For more information, run: xrf help"
+  echo "  2. View client link: xrf links"
+  echo "  3. View journal: xrf logs"
 }
 
 # Main function
@@ -1073,6 +710,10 @@ EOF
 
   parse_args "${@}"
 
+  if [[ -z "${XRAY_SNI:-}" ]]; then
+    error_exit "XRAY_SNI is required for a fresh REALITY install"
+  fi
+
   # === Step 1: Dependency check (fail-fast) ===
   log_step 1 7 "Checking core dependencies"
   check_dependencies || error_exit "Dependency check failed, cannot continue installation"
@@ -1091,8 +732,7 @@ EOF
 
   # === Step 3: Configuration validation ===
   log_step 3 7 "Validating configuration parameters"
-  log_substep "Topology: ${TOPOLOGY}" "✓"
-  [[ -n "${DOMAIN}" ]] && log_substep "Domain: ${DOMAIN}" "✓"
+  log_substep "REALITY SNI: ${XRAY_SNI}" "✓"
   log_substep "Version: ${VERSION}" "✓"
 
   # === Step 4: System compatibility check ===

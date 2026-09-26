@@ -105,7 +105,7 @@ ensure_reality_dest() {
   case "${host,,}" in
     *icloud-content.com | *cdn-apple.com | *mzstatic.com | *icloud.com | *apple.com)
       core::log warn "Apple/iCloud REALITY dest may cause IP blocking (Xray v26.3.27+)" \
-        "$(printf '{"host":"%s","suggestion":"Use a non-Apple domain such as www.microsoft.com"}' "${host}")"
+        "$(printf '{"host":"%s","suggestion":"Choose a separately verified REALITY target"}' "${host}")"
       ;;
   esac
 
@@ -468,25 +468,11 @@ deploy_with_lock() {
 
 main() {
   core::init "${@}"
-  local topology="reality-only"
-  while [[ $# -gt 0 ]]; do
-    case "${1}" in
-      --topology)
-        topology="${2}"
-        shift 2
-        ;;
-      *) shift ;;
-    esac
-  done
-
-  # Security: Validate topology parameter
-  case "${topology}" in
-    "reality-only") ;;
-    *)
-      core::log fatal "invalid topology" "$(printf '{"topology":"%s","valid_options":"reality-only"}' "${topology}")"
-      ;;
-  esac
-  core::with_flock "$(state::lock)" deploy_with_lock "${topology}"
+  if [[ $# -gt 0 ]]; then
+    core::log error "configure takes no topology arguments" '{}'
+    return 1
+  fi
+  core::with_flock "$(state::lock)" deploy_with_lock "reality-only"
 }
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   main "${@}"

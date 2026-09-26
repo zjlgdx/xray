@@ -15,20 +15,8 @@ teardown() {
 
 # === Readonly Constants Tests ===
 
-@test "DEFAULT_TOPOLOGY is reality-only" {
-  [ "${DEFAULT_TOPOLOGY}" = "reality-only" ]
-}
-
 @test "DEFAULT_XRAY_PORT is 443" {
   [ "${DEFAULT_XRAY_PORT}" = "443" ]
-}
-
-@test "DEFAULT_CADDY_CERT_BASE path" {
-  [ "${DEFAULT_CADDY_CERT_BASE}" = "/root/.local/share/caddy/certificates" ]
-}
-
-@test "DEFAULT_XRAY_CERT_DIR path" {
-  [ "${DEFAULT_XRAY_CERT_DIR}" = "/usr/local/etc/xray/certs" ]
 }
 
 @test "no implicit REALITY SNI target is defined" {
