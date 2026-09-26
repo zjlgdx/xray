@@ -2,91 +2,53 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "${HERE}/lib/core.sh"
-. "${HERE}/lib/plugins.sh"
+. "${HERE}/lib/validators.sh"
 . "${HERE}/modules/state.sh"
 . "${HERE}/modules/net/network.sh"
-. "${HERE}/services/xray/common.sh"
 
 main() {
-  core::init "${@}"
-  plugins::ensure_dirs
-  plugins::load_enabled
-  local state
-  state="$(state::load)"
-
-  # Performance optimization: Extract all fields in single jq call (12→1 fork)
-  # jq emits newline-delimited values; mapfile preserves empty fields
-  local -a fields=()
-  mapfile -t fields < <(
-    echo "${state}" | jq -r '
-      [
-        .name // .topology // "reality-only",
-        .xray.reality_sni // "www.apple.com",
-        .xray.short_id // "",
-        .xray.reality_public_key // "",
-        .xray.vision_port // "8443",
-        .xray.reality_port // "443",
-        .xray.uuid_vision // "",
-        .xray.uuid_reality // "",
-        .xray.domain // "",
-        .xray.uuid // "",
-        .xray.port // "443",
-        .xray.fingerprint // "chrome",
-        .xray.vless_encryption // "none"
-      ] | .[] // ""
-    '
-  )
-  local topo="${fields[0]:-}"
-  local sni="${fields[1]:-}"
-  local sid="${fields[2]:-}"
-  local pbk="${fields[3]:-}"
-  local vport="${fields[4]:-}"
-  local rport="${fields[5]:-}"
-  local uv="${fields[6]:-}"
-  local ur="${fields[7]:-}"
-  local dom="${fields[8]:-}"
-  local uuid="${fields[9]:-}"
-  local port="${fields[10]:-}"
-  local fp="${fields[11]:-chrome}"
-  local vless_encryption="${fields[12]:-none}"
-  # Ensure shortId is correct: if empty, try to read from config file
-  if [[ -z "${sid}" && -f "$(xray::active)/05_inbounds.json" ]]; then
-    sid="$(jq -r '.inbounds[]?.streamSettings?.realitySettings?.shortIds?[1] // .inbounds[]?.streamSettings?.realitySettings?.shortIds?[0] // empty' "$(xray::active)/05_inbounds.json" 2> /dev/null | head -1)"
+  core::init "$@"
+  local path state uuid port sni sid pbk fp ip
+  path="$(state::path)"
+  if [[ ! -r "${path}" ]]; then
+    core::log error "connection state is not readable; run xrf links with access to private state" '{}'
+    return 1
   fi
-  local ip="${XRAY_SERVER_IP:-}"
-  [[ -n "${ip}" ]] || ip="$(net::detect_public_ip || true)"
-  [[ -n "${ip}" ]] || ip="YOUR_SERVER_IP"
-  echo "========== LINKS =========="
-  local links=()
-  case "${topo}" in
-    vision-reality)
-      # All fields already extracted in single jq call above
-      if [[ -n "${dom}" && -n "${uv}" ]]; then
-        local vlink="vless://${uv}@${dom}:${vport}?security=tls&flow=xtls-rprx-vision&sni=${dom}&fp=${fp}#Vision-${dom}"
-        echo "VISION : ${vlink}"
-        links+=("${vlink}")
-      fi
-      if [[ -n "${ur}" && -n "${pbk}" && -n "${sid}" ]]; then
-        local rlink="vless://${ur}@${ip}:${rport}?encryption=${vless_encryption}&flow=xtls-rprx-vision&security=reality&sni=${sni%%,*}&fp=${fp}&pbk=${pbk}&sid=${sid}&spx=%2F#REALITY-${ip}"
-        echo "REALITY: ${rlink}"
-        links+=("${rlink}")
-      fi
-      ;;
-    *)
-      # All fields already extracted in single jq call above (reality-only topology)
-      if [[ -n "${uuid}" && -n "${pbk}" && -n "${sid}" ]]; then
-        local link="vless://${uuid}@${ip}:${port}?encryption=${vless_encryption}&flow=xtls-rprx-vision&security=reality&sni=${sni%%,*}&fp=${fp}&pbk=${pbk}&sid=${sid}&spx=%2F#REALITY-${ip}"
-        echo "REALITY: ${link}"
-        links+=("${link}")
-      else
-        echo "REALITY: vless://<UUID>@${ip}:${port}?encryption=${vless_encryption}&flow=xtls-rprx-vision&security=reality&sni=${sni%%,*}&fp=${fp}&pbk=<PUBLIC_KEY>&sid=<SHORT_ID>&spx=%2F#REALITY-${ip}"
-      fi
-      ;;
-  esac
-  # Emit plugin hook for each link
-  for link in "${links[@]}"; do
-    plugins::emit links_render "link=${link}" "topology=${topo}"
-  done
-  echo "=========================="
+  state="$(cat "${path}")" || return 1
+  if ! jq -e '.name == "reality-only" and (.xray | type == "object")' <<< "${state}" > /dev/null; then
+    core::log error "unsupported or invalid connection state" '{}'
+    return 1
+  fi
+  uuid="$(jq -r '.xray.uuid // empty' <<< "${state}")"
+  port="$(jq -r '.xray.port // empty' <<< "${state}")"
+  sni="$(jq -r '.xray.reality_sni // empty' <<< "${state}")"
+  sid="$(jq -r '.xray.short_id // empty' <<< "${state}")"
+  pbk="$(jq -r '.xray.reality_public_key // empty' <<< "${state}")"
+  fp="$(jq -r '.xray.fingerprint // "chrome"' <<< "${state}")"
+  if [[ -z "${uuid}" || -z "${port}" || -z "${sni}" || -z "${sid}" || -z "${pbk}" ]] \
+    || ! validators::uuid "${uuid}" || ! validators::port "${port}" || ! validators::shortid "${sid}"; then
+    core::log error "connection credentials are incomplete or invalid" '{}'
+    return 1
+  fi
+  sni="${sni%%,*}"
+  if ! validators::hostname "${sni}" || ! validators::fingerprint "${fp}" || [[ ! "${pbk}" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    core::log error "connection credentials are unsafe for a URI" '{}'
+    return 1
+  fi
+  ip="${XRAY_SERVER_IP:-}"
+  [[ -n "${ip}" ]] || ip="$(net::detect_public_ip)" || return 1
+  if [[ -z "${ip}" ]]; then
+    core::log error "cannot determine server IP" '{}'
+    return 1
+  fi
+  if [[ ! "${ip}" =~ ^[0-9.]+$ && ! "${ip}" =~ ^[0-9a-fA-F:]+$ ]]; then
+    core::log error "server IP is invalid for a URI" '{}'
+    return 1
+  fi
+  [[ "${ip}" == *:* && "${ip}" != \[*\] ]] && ip="[${ip}]"
+  printf '========== LINKS ==========\n'
+  printf 'REALITY: vless://%s@%s:%s?encryption=none&flow=xtls-rprx-vision&security=reality&sni=%s&fp=%s&pbk=%s&sid=%s&spx=%%2F#REALITY-%s\n' \
+    "${uuid}" "${ip}" "${port}" "${sni}" "${fp}" "${pbk}" "${sid}" "${ip}"
+  printf '==========================\n'
 }
-main "${@}"
+main "$@"

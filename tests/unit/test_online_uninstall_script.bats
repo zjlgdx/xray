@@ -11,41 +11,98 @@ teardown() {
   cleanup_test_env
 }
 
+@test "online uninstaller rejects unsupported keep-config with exit 2" {
+  run bash -c '
+    source "$1/uninstall.sh"
+    parse_args --keep-config
+  ' _ "$PROJECT_ROOT"
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"Unknown option: --keep-config"* ]]
+}
+
+@test "online uninstaller rejects arbitrary unknown option with exit 2" {
+  run bash -c '
+    source "$1/uninstall.sh"
+    parse_args --force --unexpected
+  ' _ "$PROJECT_ROOT"
+  [ "$status" -eq 2 ]
+}
+
+@test "online unknown option exits before invoking installed xrf" {
+  local install_dir="${TEST_TMPDIR}/tool"
+  mkdir -p "${install_dir}/bin"
+  printf '#!/usr/bin/env bash\ntouch "$XRF_UNINSTALL_CALLED"\n' >"${install_dir}/bin/xrf"
+  chmod +x "${install_dir}/bin/xrf"
+  export XRF_UNINSTALL_CALLED="${TEST_TMPDIR}/uninstall.called"
+  run bash -c '
+    source "$1/uninstall.sh"
+    INSTALL_DIR="$2/tool"
+    main --unexpected
+  ' _ "$PROJECT_ROOT" "$TEST_TMPDIR"
+  [ "$status" -eq 2 ]
+  [ ! -e "${XRF_UNINSTALL_CALLED}" ]
+}
+
+@test "online cleanup removes only the selected custom installation link" {
+  local install_dir="${TEST_TMPDIR}/custom-tool"
+  local link="${TEST_TMPDIR}/xrf"
+  mkdir -p "${install_dir}/bin"
+  : >"${install_dir}/bin/xrf"
+  ln -s "${install_dir}/bin/xrf" "${link}"
+  run bash -c '
+    source "$1/uninstall.sh"
+    INSTALL_DIR="$2"
+    TEST_LINK="$3"
+    rm() { [[ "${*: -1}" == "$TEST_LINK" ]] && command rm "$@"; }
+    cleanup_symlinks "$TEST_LINK"
+  ' _ "$PROJECT_ROOT" "$install_dir" "$link"
+  [ "$status" -eq 0 ]
+  [ ! -L "$link" ]
+}
+
+@test "online cleanup retains unrelated live and dangling links" {
+  local install_dir="${TEST_TMPDIR}/custom-tool"
+  local unrelated="${TEST_TMPDIR}/other-tool/bin/xrf"
+  local link="${TEST_TMPDIR}/xrf"
+  mkdir -p "${install_dir}/bin" "$(dirname "$unrelated")"
+  : >"${unrelated}"
+  for target in "$unrelated" "${TEST_TMPDIR}/absent/xrf"; do
+    ln -s "$target" "$link"
+    run bash -c '
+      source "$1/uninstall.sh"
+      INSTALL_DIR="$2"
+      TEST_LINK="$3"
+      rm() { [[ "$1" == "$TEST_LINK" ]] && command rm "$@"; }
+      cleanup_symlinks "$TEST_LINK"
+    ' _ "$PROJECT_ROOT" "$install_dir" "$link"
+    [ "$status" -eq 0 ]
+    [ -L "$link" ]
+    [ "$(readlink "$link")" = "$target" ]
+    command rm "$link"
+  done
+}
+
+@test "online cleanup succeeds when no owned link exists" {
+  local link="${TEST_TMPDIR}/absent-xrf"
+  run bash -c '
+    source "$1/uninstall.sh"
+    INSTALL_DIR="$2/custom-tool"
+    TEST_LINK="$2/absent-xrf"
+    rm() { [[ "$1" == "$TEST_LINK" ]] && command rm "$@"; }
+    cleanup_symlinks "$TEST_LINK"
+  ' _ "$PROJECT_ROOT" "$TEST_TMPDIR"
+  [ "$status" -eq 0 ]
+}
+
 @test "uninstall.sh - parse_args accepts non-interactive flags" {
   run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
-    parse_args --force --keep-config --remove-install-dir --debug
-    printf "%s|%s|%s|%s" "${FORCE}" "${KEEP_CONFIG}" "${REMOVE_INSTALL_DIR}" "${DEBUG}"
+    parse_args --force --remove-install-dir --debug
+    printf "%s|%s|%s" "${FORCE}" "${REMOVE_INSTALL_DIR}" "${DEBUG}"
   '
 
   [ "${status}" -eq 0 ]
-  [ "${output}" = "true|true|true|true" ]
-}
-
-@test "uninstall.sh - cleanup returns success when TMP_DIR is unset" {
-  run bash -c '
-    source "'"${PROJECT_ROOT}"'/uninstall.sh"
-    unset TMP_DIR
-
-    cleanup
-  '
-
-  [ "${status}" -eq 0 ]
-}
-
-@test "uninstall.sh - cleanup removes temporary directory when present" {
-  local tmp_dir="${TEST_TMPDIR}/uninstall-tmp"
-  mkdir -p "${tmp_dir}"
-
-  run bash -c '
-    source "'"${PROJECT_ROOT}"'/uninstall.sh"
-    TMP_DIR="'"${tmp_dir}"'"
-
-    cleanup
-  '
-
-  [ "${status}" -eq 0 ]
-  [ ! -d "${tmp_dir}" ]
+  [ "${output}" = "true|true|true" ]
 }
 
 @test "uninstall.sh - check_installation fails in non-interactive mode without --force" {
@@ -83,7 +140,6 @@ teardown() {
 @test "uninstall.sh - confirm_uninstallation auto-continues in non-interactive mode" {
   run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
-    KEEP_CONFIG="true"
     FORCE=""
 
     confirm_uninstallation
@@ -115,31 +171,17 @@ EOF
   '
 
   [ "${status}" -eq 0 ]
-  [ "$(cat "${workdir}/calls.log")" = "${workdir}/install|uninstall" ]
+  [[ "$(cat "${workdir}/calls.log")" == *"|uninstall" ]]
 }
 
-@test "uninstall.sh - run_xrf_uninstall falls back to downloaded xrf" {
-  local workdir="${TEST_TMPDIR}/fallback-downloaded-xrf"
-  mkdir -p "${workdir}/tmp/xray-fusion/bin"
-
-  cat > "${workdir}/tmp/xray-fusion/bin/xrf" <<'EOF'
-#!/usr/bin/env bash
-printf "%s|%s\n" "$PWD" "$*" >> "__CALLS_FILE__"
-exit 0
-EOF
-  sed -i.bak "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/tmp/xray-fusion/bin/xrf"
-  chmod +x "${workdir}/tmp/xray-fusion/bin/xrf"
-
+@test "uninstall.sh refuses missing installed command without touching service" {
   run bash -c '
-    source "'"${PROJECT_ROOT}"'/uninstall.sh"
-    INSTALL_DIR="'"${workdir}"'/missing-install"
-    TMP_DIR="'"${workdir}"'/tmp"
-
+    source "$1/uninstall.sh"
+    INSTALL_DIR="$2/missing"
     run_xrf_uninstall
-  '
-
-  [ "${status}" -eq 0 ]
-  [ "$(cat "${workdir}/calls.log")" = "${workdir}/tmp/xray-fusion|uninstall" ]
+  ' _ "$PROJECT_ROOT" "$TEST_TMPDIR"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Installed xrf command is unavailable"* ]]
 }
 
 @test "uninstall.sh - remove_installation_directory honors --remove-install-dir" {

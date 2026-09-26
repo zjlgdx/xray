@@ -10,9 +10,11 @@ LOCAL_FALLBACK_IMAGE="${XRF_SMOKE_FALLBACK_IMAGE:-docker.950288.xyz/library/ubun
 SMOKE_MODE="${XRF_SMOKE_MODE:-workspace}"
 ONLINE_INSTALL_URL="${XRF_SMOKE_INSTALL_URL:-}"
 ONLINE_UNINSTALL_URL="${XRF_SMOKE_UNINSTALL_URL:-}"
-ONLINE_REPO_URL="${XRF_SMOKE_REPO_URL:-https://github.com/xrf9268-hue/xray.git}"
+ONLINE_REPO_URL="${XRF_SMOKE_REPO_URL:-https://github.com/zjlgdx/xray.git}"
 ONLINE_BRANCH="${XRF_SMOKE_BRANCH:-}"
 SMOKE_XRAY_VERSION="${XRF_SMOKE_XRAY_VERSION:-}"
+# Deliberate test fixture, not a recommended production REALITY target.
+SMOKE_SNI="${XRF_SMOKE_SNI:-www.cloudflare.com}"
 
 log() {
   printf '[smoke] %s\n' "$*"
@@ -144,7 +146,7 @@ install_test_dependencies() {
     log "trying apt mirror ${mirror}"
     set_apt_mirror "${mirror}"
     run_in_container "rm -rf /var/lib/apt/lists/*"
-    if run_in_container_retry "export DEBIAN_FRONTEND=noninteractive; apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update > /dev/null && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y bash ca-certificates curl git wget unzip jq openssl iproute2 sudo > /dev/null" 3; then
+    if run_in_container_retry "export DEBIAN_FRONTEND=noninteractive; apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update > /dev/null && apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y bash ca-certificates curl git unzip jq openssl iproute2 sudo > /dev/null" 3; then
       log "dependency install succeeded via ${mirror}"
       return 0
     fi
@@ -160,6 +162,13 @@ install_systemctl_mock() {
 set -euo pipefail
 
 case \"\${1:-}\" in
+  show)
+    case \"\${2:-}\" in
+      --property=ActiveState) printf 'active\n' ;;
+      --property=UnitFileState) printf 'enabled\n' ;;
+      *) exit 1 ;;
+    esac
+    ;;
   daemon-reload|enable|disable|start|stop|restart|reset-failed|is-active)
     exit 0
     ;;
@@ -182,11 +191,11 @@ run_install_command() {
   fi
 
   if [[ "${SMOKE_MODE}" == "online" ]]; then
-    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}'; curl -fsSL '${ONLINE_INSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1" || return $?
+    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}' XRAY_SNI='${SMOKE_SNI}'; curl -fsSL '${ONLINE_INSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1" || return $?
     return 0
   fi
 
-  run_in_container "cd /workspace/xray && ./bin/xrf install${argstr} > '${logfile}' 2>&1"
+  run_in_container "cd /workspace/xray && XRAY_SNI='${SMOKE_SNI}' ./bin/xrf install${argstr} > '${logfile}' 2>&1"
 }
 
 run_uninstall_command() {
@@ -200,7 +209,7 @@ run_uninstall_command() {
   fi
 
   if [[ "${SMOKE_MODE}" == "online" ]]; then
-    run_in_container "set -o pipefail; export XRF_REPO_URL='${ONLINE_REPO_URL}' XRF_BRANCH='${ONLINE_BRANCH}'; curl -fsSL '${ONLINE_UNINSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1" || return $?
+    run_in_container "set -o pipefail; curl -fsSL '${ONLINE_UNINSTALL_URL}' | bash -s --${argstr} > '${logfile}' 2>&1" || return $?
     return 0
   fi
 
@@ -291,7 +300,7 @@ install_systemctl_mock
 
 log "scenario 1: fresh install (default paths)"
 CURRENT_SCENARIO="scenario 1 fresh install"
-run_install_command /tmp/scenario1.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes
+run_install_command /tmp/scenario1.log --version "${SMOKE_XRAY_VERSION}" --yes
 run_in_container "test -x /usr/local/bin/xray"
 run_in_container "test -L /usr/local/etc/xray/active"
 run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.json > /dev/null"
@@ -299,7 +308,7 @@ run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.j
 log "scenario 2: reinstall refuses to replace existing credentials"
 CURRENT_SCENARIO="scenario 2 reinstall guard"
 run_in_container "sha256sum /usr/local/etc/xray/active/*.json /var/lib/xray-fusion/state.json > /tmp/before-reinstall.sha256"
-if run_install_command /tmp/scenario2.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes; then
+if run_install_command /tmp/scenario2.log --version "${SMOKE_XRAY_VERSION}" --yes; then
   log "reinstall unexpectedly succeeded"
   exit 1
 fi
@@ -312,7 +321,7 @@ if [[ "${SMOKE_MODE}" == "online" ]]; then
 
   log "scenario 4: online reinstall after uninstall succeeds"
   CURRENT_SCENARIO="scenario 4 online reinstall"
-  run_install_command /tmp/scenario4-reinstall.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes
+  run_install_command /tmp/scenario4-reinstall.log --version "${SMOKE_XRAY_VERSION}" --yes
   run_in_container "test -x /usr/local/bin/xray"
   run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.json > /dev/null"
 else
@@ -320,21 +329,19 @@ else
   CURRENT_SCENARIO="scenario 3 uninstall/reinstall"
   run_uninstall_command /tmp/scenario3-uninstall1.log
   run_uninstall_command /tmp/scenario3-uninstall2.log
-  run_install_command /tmp/scenario3-reinstall.log --topology reality-only --version "${SMOKE_XRAY_VERSION}" --yes
+  run_install_command /tmp/scenario3-reinstall.log --version "${SMOKE_XRAY_VERSION}" --yes
   run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.json > /dev/null"
 
-  log "scenario 4: fresh vision-reality install with custom cert dir"
-  run_uninstall_command /tmp/scenario4-uninstall.log
-  CURRENT_SCENARIO="scenario 4 topology switch"
-  run_in_container "mkdir -p /tmp/certs && openssl req -x509 -nodes -newkey rsa:2048 -keyout /tmp/certs/privkey.pem -out /tmp/certs/fullchain.pem -days 1 -subj '/CN=example.com' > /dev/null 2>&1 && chmod 644 /tmp/certs/fullchain.pem && chmod 640 /tmp/certs/privkey.pem"
-  run_in_container "cd /workspace/xray && XRAY_CERT_DIR=/tmp/certs ./bin/xrf install --topology vision-reality --domain example.com --version '${SMOKE_XRAY_VERSION}' --yes > /tmp/scenario4.log 2>&1"
-  run_in_container "jq -e '.name == \"vision-reality\" and .xray.cert_dir == \"/tmp/certs\"' /var/lib/xray-fusion/state.json > /dev/null"
-  run_in_container "conf=\$(readlink -f /usr/local/etc/xray/active)/05_inbounds.json; jq -e '.inbounds | length == 2' \"\${conf}\" > /dev/null"
+  log "scenario 4: backup restores a controlled REALITY config change"
+  CURRENT_SCENARIO="scenario 4 backup restore"
+  run_in_container "cd /workspace/xray && ./bin/xrf links > /tmp/links-before && sha256sum /usr/local/etc/xray/active/*.json /var/lib/xray-fusion/state.json /var/lib/xray-fusion/config.sha256 > /tmp/before-restore.sha256 && ./bin/xrf backup create --name smoke-recovery > /tmp/scenario4-create.log 2>&1"
+  run_in_container "conf=\$(readlink -f /usr/local/etc/xray/active)/00_log.json; jq '.log.loglevel = \"debug\"' \"\${conf}\" > /tmp/mutated-log.json && cp /tmp/mutated-log.json \"\${conf}\" && name=\$(basename \$(find /var/lib/xray-fusion/backups -name 'smoke-recovery-*.metadata.json' -print -quit) .metadata.json) && cd /workspace/xray && XRF_YES=true ./bin/xrf backup restore \"\${name}\" > /tmp/scenario4-restore.log 2>&1"
+  run_in_container "cd /workspace/xray && sha256sum -c /tmp/before-restore.sha256 && ./bin/xrf links > /tmp/links-after && cmp /tmp/links-before /tmp/links-after && runuser -u xray -- /usr/local/bin/xray -test -confdir /usr/local/etc/xray/active -format json > /tmp/scenario4-xray-test.log 2>&1"
 
   run_uninstall_command /tmp/scenario4-uninstall-after.log
   log "scenario 5: custom prefix/etc renders dynamic systemd unit paths"
   CURRENT_SCENARIO="scenario 5 custom paths"
-  run_in_container "cd /workspace/xray && XRF_PREFIX=/tmp/xrf/prefix XRF_ETC=/tmp/xrf/etc XRF_VAR=/tmp/xrf/var ./bin/xrf install --topology reality-only --version '${SMOKE_XRAY_VERSION}' --yes > /tmp/scenario5.log 2>&1"
+  run_in_container "cd /workspace/xray && XRAY_SNI='${SMOKE_SNI}' XRF_PREFIX=/tmp/xrf/prefix XRF_ETC=/tmp/xrf/etc XRF_VAR=/tmp/xrf/var ./bin/xrf install --version '${SMOKE_XRAY_VERSION}' --yes > /tmp/scenario5.log 2>&1"
   run_in_container "grep -q 'ExecStart=/tmp/xrf/prefix/bin/xray run -confdir /tmp/xrf/etc/xray/active -format json' /etc/systemd/system/xray.service"
   run_in_container "grep -q 'ReadWritePaths=/tmp/xrf/etc/xray' /etc/systemd/system/xray.service"
 fi

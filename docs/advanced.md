@@ -1,126 +1,68 @@
 # Advanced Configuration
 
-## Installation Options
+Xray-Fusion installs one VLESS + REALITY inbound using the Vision flow (`xtls-rprx-vision`) over raw transport. It does not install a separate TLS inbound, Caddy, certificates, plugins, templates, firewall rules, or host TCP tuning.
 
-```bash
---topology reality-only|vision-reality  # Deployment mode (required)
---domain <domain>                       # Domain (required for vision-reality)
---version <version>                     # Xray version (default: newest published release)
---plugins <plugin1,plugin2>             # Comma-separated plugin list
---template <template-id>                # Use predefined template
---uuid <uuid>                           # Custom UUID
---enable-vless-encryption               # Enable optional VLESS Encryption for Reality inbound
---vless-decryption <value>              # Custom Reality inbound decryption value
---vless-encryption <value>              # Custom Reality client-link encryption value
---debug                                 # Enable debug logging
-```
+## Fresh installation
 
-## Version Policy
+Choose an actual target whose TLS endpoint accepts your SNI, supports TLS 1.3 and HTTP/2, and does not redirect. The SNI is required; there is no built-in target recommendation. The network probe is advisory, while input and candidate Xray configuration validation are required for installation.
 
-- Default `--version latest` selects the newest published, non-draft GitHub
-  release by publication time, including prereleases.
-- Use an explicit `--version vX.Y.Z` to pin a release. If GitHub's releases API
-  fails, the installer fails instead of selecting an older stable release.
+~~~bash
+./bin/xrf test-sni your-target.example --target your-target.example:443
+sudo XRAY_SNI=your-target.example xrf install --yes
+sudo xrf links
+~~~
 
-## Templates
+For a different destination, set `XRAY_REALITY_DEST=host:port` along with `XRAY_SNI`. Without it, the destination is `<XRAY_SNI>:443`. A hostname in the destination may differ from the SNI; test the exact pair with `xrf test-sni <sni> --target <host:port>`. The configured Xray inbound listens on port 443 by default. IPv4-only hosts use an IPv4 listen address and DNS strategy; IPv6-capable hosts use dual-stack settings.
 
-| Template | Topology | Use Case |
-|----------|----------|----------|
-| `home` | reality-only | Personal use |
-| `office` | vision-reality | Small team (5-20 users) |
-| `server` | vision-reality | Production (50+ users) |
+Supported install options include `--version latest|vX.Y.Z`, `--uuid`, `--uuid-from-string`, `--fingerprint`, `--yes`, `--dry-run`, and `--debug`. See `xrf install --help` for the current parser. Existing installations must use `xrf upgrade` for binary updates; `install` rejects existing managed artifacts rather than regenerating credentials.
 
-```bash
-curl -sL install.sh | bash -s -- --template office --domain vpn.company.com
-```
+## Xray version
 
-## Deployment Modes
+The default `latest` resolves the newest published, non-draft release by publication time from the official Xray-core releases API, including prereleases. The latest release verified during this change was v26.9.9; it is not a version pinned into the product. API failure or invalid newest release metadata fails closed rather than selecting an older stable release. The same resolver serves install, upgrade, and the lifecycle smoke test.
 
-### Reality-only
-- No domain required
-- SNI camouflage (default: `www.apple.com`)
-- Port: 443
-- Supports optional VLESS Encryption (`decryption` configurable)
-- Auto network profile: IPv4-only hosts use `listen: 0.0.0.0` + `dns.queryStrategy: UseIPv4`
+~~~bash
+sudo xrf upgrade --version latest
+sudo xrf upgrade --version v26.9.9
+~~~
 
-### Vision-Reality
-- Domain ownership required
-- Real TLS + Reality fallback
-- Ports: 8443 (Vision), 443 (Reality)
-- VLESS Encryption applies to Reality inbound only (Vision remains `decryption: none`)
-- Auto network profile: IPv6-capable hosts use dual-stack `listen: ::` + `dns.queryStrategy: UseIP`
+Upgrade replaces the Xray binary while retaining the managed configuration and client credentials. It validates the candidate and the existing configuration, restarts the service, checks the running executable, and restores the prior binary and metadata on a bounded failure path. A restart interrupts existing connections. This is not a legacy topology migration interface.
 
-## Plugins
+## Private credentials and links
 
-| Plugin | Description |
-|--------|-------------|
-| `cert-auto` | Automatic TLS certificates via Caddy |
-| `firewall` | Firewall port management |
-| `logrotate-obs` | Log rotation |
-| `links-qr` | QR code for client links |
+The managed state directory is mode 0700 and the state file is mode 0600. It contains the full connection credentials. Use `sudo xrf links` (or equivalent authorized root access) to print the VLESS URI. Share that URI only with the intended client; the normal CLI does not export alternate client formats or generate QR files.
 
-```bash
-xrf plugin list
-xrf plugin enable cert-auto
-xrf plugin info cert-auto
-```
+The server config contains a REALITY shortId pool. A client URI uses its selected shortId; the pool is not a per-client secret generator. The URI includes the Vision flow, SNI, public key, shortId, fingerprint and configured server address.
 
-## Backup & Restore
+## Backup and restore
 
-```bash
-xrf backup create
-xrf backup create --name pre-upgrade
-xrf backup create --name secure-copy --encrypt
-xrf backup create --name secure-copy --encrypt --password-file /root/backup.pass
-xrf backup list
-xrf backup restore <name>
-xrf backup restore <name> --password-file /root/backup.pass
-xrf backup verify <name>
-```
+~~~bash
+sudo xrf backup create --name before-change
+sudo xrf backup create --name encrypted-copy --encrypt --password-file /root/backup.pass
+sudo xrf backup list
+sudo xrf backup verify <name>
+sudo xrf backup restore <name> --password-file /root/backup.pass
+sudo xrf backup delete <name>
+~~~
 
-## Client Export
+The password option is needed only for encrypted archives. Backups include private state and the matching configuration digest, so keep archives and passwords private. Create and restore work only with the current managed REALITY release layout; unknown or legacy layouts are rejected before service replacement. Restore validates the archived release with Xray before stopping the service, creates a pre-restore backup, and keeps bounded recovery material when rollback cannot finish. Check the reported path if manual recovery is required.
 
-```bash
-xrf export uri
-xrf export v2rayn
-xrf export clash
-xrf export sub
-xrf export qr
-xrf export all --out-dir /tmp/xrf-export
-```
+## Logs and diagnostics
 
-## Environment Variables
+Xray writes access and error output to stdout/stderr; systemd collects it in journald. Journald controls retention and rotation. The tool does not create file logs or logrotate jobs.
 
-```bash
-XRAY_SNI=www.apple.com                        # Reality SNI
-XRAY_VISION_PORT=8443                         # Vision port
-XRAY_REALITY_PORT=443                         # Reality port
-XRAY_VLESS_ENCRYPTION_ENABLED=false           # Optional VLESS Encryption switch
-XRAY_VLESS_DECRYPTION=<value>                 # Reality inbound decryption value
-XRAY_VLESS_ENCRYPTION=<value>                 # Reality link encryption value
-CADDY_HTTP_PORT=80                            # ACME challenge
-CADDY_HTTPS_PORT=8444                         # Caddy HTTPS
-```
+~~~bash
+sudo xrf logs --lines 100
+sudo xrf logs --follow
+sudo xrf logs --export /root/xray-diagnostic.log
+sudo xrf check --deep
+sudo xrf health
+sudo xrf test-sni your-target.example --target your-target.example:443
+~~~
 
-## Port Allocation (vision-reality)
+The log export option writes a requested diagnostic copy; it does not switch the service to file logging. `XRAY_LOG_LEVEL` controls Xray verbosity. `test-sni` checks the chosen external target and SNI, but does not establish client-to-VPS interoperability.
 
-| Port | Service |
-|------|---------|
-| 443 | Reality |
-| 8443 | Vision |
-| 8444 | Caddy HTTPS |
-| 8080 | Caddy fallback |
+## Paths and network
 
-## Client Requirements
+`XRF_PREFIX`, `XRF_ETC`, and `XRF_VAR` customize the binary, configuration, and state roots. The default state lives under `/var/lib/xray-fusion`; the systemd unit runs Xray with the active release directory. The tool does not edit host firewall or sysctl settings. Open the configured REALITY port in your own network controls.
 
-Use a current Xray-core client compatible with the server's configured protocol.
-Check the [official releases list](https://github.com/XTLS/Xray-core/releases)
-and verify interoperability after upgrading either endpoint.
-
-## Development
-
-```bash
-make fmt        # Format
-make lint       # Lint
-make test-unit  # Test
-```
+For source changes, run `make fmt && make lint && make test-unit`, then relevant integration and Docker lifecycle checks. The host shell is the baseline development environment; `thin-devbox-shell` remains an optional external tool.

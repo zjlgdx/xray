@@ -21,14 +21,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 #   None (reads from environment variables)
 #
 # Globals:
-#   TOPOLOGY - Installation topology (required)
-#   VERSION - Xray version (required)
-#   XRAY_DOMAIN - Domain name (required for vision-reality)
-#   XRAY_PORT - Reality port (reality-only)
-#   XRAY_VISION_PORT - Vision port (vision-reality)
-#   XRAY_REALITY_PORT - Reality port (vision-reality)
-#   XRAY_FALLBACK_PORT - Fallback port (vision-reality)
-#   PLUGINS - Comma-separated plugin list (optional)
+#   VERSION - Xray version
+#   XRAY_PORT - REALITY port
 #   XRF_JSON - If "true", output JSON format
 #
 # Output:
@@ -41,71 +35,18 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 #   preview::show
 ##
 preview::show() {
-  # shellcheck disable=SC2154  # TOPOLOGY, VERSION, PLUGINS, XRAY_DOMAIN set by args::parse()
-  local topology="${TOPOLOGY}"
-  # shellcheck disable=SC2154
+  # shellcheck disable=SC2154  # Set by args::parse/core::init in the caller.
   local version="${VERSION}"
+  local port="${XRAY_PORT:-${DEFAULT_XRAY_PORT}}"
+  local sni="${XRAY_SNI:-}" target
+  target="${XRAY_REALITY_DEST:-${sni%%,*}:443}"
+  [[ "${target}" == *:* ]] || target="${target}:443"
   # shellcheck disable=SC2154
-  local domain="${XRAY_DOMAIN:-N/A}"
-  # shellcheck disable=SC2154
-  local plugins="${PLUGINS:-none}"
-
-  # Determine ports based on topology (use defaults from lib/defaults.sh)
-  local ports=""
-  if [[ "${topology}" == "vision-reality" ]]; then
-    # shellcheck disable=SC2154  # XRAY_* variables are optionally set by user or use defaults
-    local vision_port="${XRAY_VISION_PORT:-${DEFAULT_XRAY_VISION_PORT}}"
-    local reality_port="${XRAY_REALITY_PORT:-${DEFAULT_XRAY_REALITY_PORT}}"
-    local fallback_port="${XRAY_FALLBACK_PORT:-${DEFAULT_XRAY_FALLBACK_PORT}}"
-    ports="${reality_port} (Reality), ${vision_port} (Vision), ${fallback_port} (Caddy)"
-  else
-    # shellcheck disable=SC2154  # XRAY_PORT is optionally set by user or uses default
-    local xray_port="${XRAY_PORT:-${DEFAULT_XRAY_PORT}}"
-    ports="${xray_port} (Reality)"
-  fi
-
-  # shellcheck disable=SC2154  # XRF_JSON is set by core::init
   if [[ "${XRF_JSON}" == "true" ]]; then
-    # JSON format
-    local json_output
-    json_output=$(
-      cat << EOF
-{
-  "preview": {
-    "topology": "${topology}",
-    "version": "${version}",
-    "domain": "${domain}",
-    "ports": "${ports}",
-    "plugins": "${plugins}"
-  }
-}
-EOF
-    )
-    printf '%s\n' "${json_output}"
+    jq -n --arg version "${version}" --argjson port "${port}" --arg sni "${sni}" --arg target "${target}" \
+      '{preview:{topology:"reality-only",version:$version,port:$port,sni:$sni,target:$target}}'
   else
-    # Text format
-    cat << EOF
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                   Installation Preview
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Topology:    ${topology}
-  Xray:        ${version}
-EOF
-
-    # Only show domain for vision-reality
-    if [[ "${topology}" == "vision-reality" ]]; then
-      printf "  Domain:      %s\n" "${domain}"
-    fi
-
-    cat << EOF
-  Ports:       ${ports}
-  Plugins:     ${plugins}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-EOF
+    printf '\nInstallation Preview\n  Topology: reality-only\n  Xray: %s\n  Port: %s (REALITY)\n  SNI: %s\n  Target: %s\n\n' "${version}" "${port}" "${sni}" "${target}"
   fi
 }
 

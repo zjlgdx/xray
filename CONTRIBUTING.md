@@ -39,8 +39,8 @@ Thank you for your interest in contributing to xray-fusion! This document provid
 
 ```bash
 # Clone the repository
-git clone https://github.com/xrf9268-hue/xray.git
-cd xray-fusion
+git clone https://github.com/zjlgdx/xray.git
+cd xray
 
 # Install development dependencies
 # Ubuntu/Debian
@@ -125,8 +125,9 @@ make fmt
 # Run tests
 make test
 
-# Test manually in safe sandbox
-XRF_PREFIX=$PWD/tmp/prefix XRF_ETC=$PWD/tmp/etc bin/xrf install --topology reality-only
+# Test a manual install only inside a disposable Linux container or VM;
+# the installer also manages a service user and systemd unit.
+XRAY_SNI=your-tested-target.example bin/xrf install --yes
 ```
 
 ### 4. Commit Your Changes
@@ -153,11 +154,10 @@ relevant local validation, and push again until the checks pass.
 
 - `bin/`: CLI entrypoints
 - `commands/`: High-level workflows (install, status, uninstall)
-- `lib/`: Core utilities (core.sh, args.sh, validators.sh, plugins.sh, errors.sh, defaults.sh)
-- `modules/`: Reusable helpers (io.sh, state.sh, fw/*, user/*, web/*)
+- `lib/`: Core utilities (core.sh, args.sh, validators.sh, backup.sh, errors.sh, defaults.sh)
+- `modules/`: Reusable helpers (io.sh, state.sh, user/*, net/network.sh)
 - `services/xray/`: Xray-specific logic
-- `plugins/available/`: Built-in plugins
-- `scripts/`: Standalone scripts (e.g., caddy-cert-sync.sh)
+- `scripts/`: Lifecycle smoke and CI scripts
 - `tests/`: Unit and integration tests
 
 ### Bash Style Guide
@@ -175,8 +175,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 - **Functions**: `namespace::function` (e.g., `core::log`, `io::atomic_write`)
 - **Variables**: lowercase `local` variables, UPPER_SNAKE for exported/env vars
-- **Files**: kebab-case (e.g., `cert-sync.sh`)
-- **Plugin IDs**: `[a-zA-Z0-9_-]+`
+- **Files**: kebab-case for new standalone scripts
 
 #### Indentation
 
@@ -215,7 +214,7 @@ function_name() {
 }
 ```
 
-**See**: AGENTS.md "Function Documentation Standard" section
+**See**: AGENTS.md "Function Documentation" section
 
 #### Logging Standards
 
@@ -289,7 +288,7 @@ tmp="/tmp/predictable-name"  # CWE-59: Predictable name
 cp file1 file2  # What if it fails?
 ```
 
-**See**: AGENTS.md "Shell Programming Best Practices" section
+**See**: AGENTS.md "Shell Patterns" section
 
 ---
 
@@ -358,7 +357,7 @@ teardown() {
 }
 
 @test "workflow - completes successfully" {
-  run bin/xrf install --topology reality-only
+  run env XRAY_SNI=your-tested-target.example bin/xrf install
   [ "$status" -eq 0 ]
   # Verify results...
 }
@@ -379,9 +378,8 @@ make coverage-unit-real
 make coverage-real
 ```
 
-If host `kcov` is unstable, run coverage in Docker using the CI-compatible flow
-(build `kcov` from source inside Linux). See `tests/README.md` section
-"Local Docker Coverage (Host Fallback)" for a copy-paste command.
+If host `kcov` is unstable, run coverage in a fresh Linux container using the
+CI coverage job as the reference. `tests/README.md` records the evidence limits.
 
 Practical notes:
 
@@ -422,9 +420,9 @@ Follow Conventional Commits specification:
 ```bash
 # Good commit messages
 git commit -m "feat(validators): add IPv6 private address validation"
-git commit -m "fix(cert-sync): handle mixed sudo/non-sudo scenarios"
+git commit -m "fix(backup): retain recovery material after rollback failure"
 git commit -m "docs: add ShellDoc documentation to core functions"
-git commit -m "perf: optimize certificate find from maxdepth 4 to 3"
+git commit -m "test(xray): cover REALITY release validation"
 
 # With body
 git commit -m "feat: add fatal/critical log levels
@@ -453,7 +451,7 @@ Related to: Phase 3 Task 3.2"
 1. **Ensure tests pass**: `make test`
 2. **Lint your code**: `make lint`
 3. **Format your code**: `make fmt`
-4. **Update documentation**: AGENTS.md, CLAUDE.md if adding ADRs
+4. **Update documentation**: Current user/developer guides, and `docs/adr/` for new decisions
 5. **Add tests**: For new features or bug fixes
 
 ### PR Template
@@ -470,7 +468,7 @@ Brief description of changes and motivation.
 How to validate these changes:
 \`\`\`bash
 # Specific commands to test
-bin/xrf install --topology reality-only
+XRAY_SNI=your-tested-target.example bin/xrf install
 \`\`\`
 
 ## Screenshots/Logs
@@ -482,7 +480,7 @@ bin/xrf install --topology reality-only
 - [ ] Lint passes (`make lint`)
 - [ ] Format applied (`make fmt`)
 - [ ] Tests pass (`make test`)
-- [ ] Changes are backward compatible (or migration path provided)
+- [ ] Supported current managed layout and failure paths are documented
 
 ## Related Issues
 Closes #123
@@ -520,14 +518,14 @@ git push origin feature/your-feature-name
 
 #### Project Documentation
 - **AGENTS.md**: Development guidelines, coding standards
-- **CLAUDE.md**: Architecture Decision Records (ADRs)
+- **CLAUDE.md**: Project quick reference
 - **README.md**: User-facing documentation
 - **CHANGELOG.md**: Version history (Keep a Changelog format)
 - **TROUBLESHOOTING.md**: Common issues and solutions
 
 ### Architecture Decision Records (ADRs)
 
-When making significant architectural decisions, document them in CLAUDE.md:
+When making significant architectural decisions, add a record under `docs/adr/`:
 
 ```markdown
 ### ADR-XXX: Decision Title (YYYY-MM-DD)
@@ -549,7 +547,7 @@ When making significant architectural decisions, document them in CLAUDE.md:
 - Links to RFCs, docs, GitHub discussions
 ```
 
-**See**: CLAUDE.md for examples (ADR-001 through ADR-010)
+Earlier ADRs are historical where they describe removed topologies or plugins.
 
 ---
 
@@ -579,8 +577,6 @@ When making significant architectural decisions, document them in CLAUDE.md:
 By contributing to xray-fusion, you agree that your contributions will be licensed under the same license as the project.
 
 ---
-
-Thank you for contributing to xray-fusion! 🎉
 
 ### Upgrade and deployment changes
 

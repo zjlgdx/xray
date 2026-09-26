@@ -85,20 +85,9 @@ x25519::parse_keys() {
 }
 
 x25519::derive_public_key() {
-  local xray_bin="${1}" private_key="${2}" output public="" flag
-
-  for flag in --key -key -k; do
-    output="$("${xray_bin}" x25519 "${flag}" "${private_key}" 2> /dev/null || true)"
-    [[ -z "${output}" ]] && output="$("${xray_bin}" x25519 "${flag}=${private_key}" 2> /dev/null || true)"
-    [[ -z "${output}" ]] && continue
-    local -a parsed=()
-    mapfile -t parsed < <(x25519::parse_keys "${output}")
-    public="${parsed[1]:-}"
-    if [[ -n "${public}" ]]; then
-      printf '%s\n' "${public}"
-      return 0
-    fi
-  done
-
-  return 1
+  local xray_bin="${1}" private_key="${2}" output public
+  output="$("${xray_bin}" x25519 -i "${private_key}" 2> /dev/null)" || return 1
+  public="$(x25519::parse_keys "${output}" | sed -n '2p')"
+  [[ -n "${public}" ]] || return 1
+  printf '%s\n' "${public}"
 }

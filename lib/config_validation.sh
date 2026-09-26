@@ -146,22 +146,6 @@ config::validate_business_rules() {
     outbound_tag_seen["${tag}"]=1
   done < <(jq -r '.outbounds[]?.tag // empty' <<< "${merged}")
 
-  local cert_file key_file
-  while IFS=$'\t' read -r cert_file key_file; do
-    [[ -n "${cert_file}" && -n "${key_file}" ]] || {
-      core::log error "business rule violation: tls certificate/key path is missing" '{"layer":"business-rules"}'
-      return 1
-    }
-    if [[ ! -f "${cert_file}" ]]; then
-      core::log error "business rule violation: tls certificate file not found" "$(printf '{"layer":"business-rules","file":"%s"}' "${cert_file}")"
-      return 1
-    fi
-    if [[ ! -f "${key_file}" ]]; then
-      core::log error "business rule violation: tls private key file not found" "$(printf '{"layer":"business-rules","file":"%s"}' "${key_file}")"
-      return 1
-    fi
-  done < <(jq -r '.inbounds[]? | select(.streamSettings?.security == "tls") | .streamSettings.tlsSettings.certificates[]? | [(.certificateFile // ""), (.keyFile // "")] | @tsv' <<< "${merged}")
-
   local strategy
   strategy="$(jq -r '.routing.domainStrategy // empty' <<< "${merged}")"
   if [[ -n "${strategy}" ]]; then

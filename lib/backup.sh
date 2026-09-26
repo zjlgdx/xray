@@ -168,6 +168,20 @@ backup::dir() {
 #   backup::create  # Auto-generated name
 ##
 backup::create() {
+  local name="${1:-}" encrypt="${2:-false}" password="${3:-}"
+  backup::_require_jq || return 1
+  # shellcheck disable=SC2034 # Read by commands/backup.sh after the locked call.
+  BACKUP_LAST_PASSWORD=""
+  if [[ "${encrypt}" == true && -z "${password}" ]]; then
+    password="$(backup::_generate_password)" || return 1
+    backup::_validate_password "${password}" || return 1
+    # shellcheck disable=SC2034 # Read by commands/backup.sh.
+    BACKUP_LAST_PASSWORD="${password}"
+  fi
+  core::with_flock "$(state::lock)" backup::_create_locked "${name}" "${encrypt}" "${password}"
+}
+
+backup::_create_locked() {
   # Check jq dependency
   backup::_require_jq || return 1
 
@@ -176,8 +190,6 @@ backup::create() {
   local password="${3:-}"
   local timestamp
   timestamp="$(date +%Y%m%d-%H%M%S)"
-  # shellcheck disable=SC2034  # Used by commands/backup.sh to print generated password once.
-  BACKUP_LAST_PASSWORD=""
 
   if [[ "${encrypt}" != "true" && "${encrypt}" != "false" ]]; then
     core::log error "invalid encrypt flag" "$(printf '{"encrypt":"%s"}' "${encrypt}")"
@@ -195,7 +207,8 @@ backup::create() {
 
   local backup_dir
   backup_dir="$(backup::dir)"
-  io::ensure_dir "${backup_dir}" 0700
+  io::ensure_dir "${backup_dir}" 0700 || return 1
+  chmod 0700 "${backup_dir}" || return 1
 
   local backup_file="${backup_dir}/${name}.tar.gz"
   local metadata_file="${backup_dir}/${name}.metadata.json"
@@ -208,16 +221,27 @@ backup::create() {
     if [[ -n "${password}" ]]; then
       backup::_validate_password "${password}" || return 1
     else
-      password="$(backup::_generate_password)" || return 1
-      backup::_validate_password "${password}" || return 1
-      # shellcheck disable=SC2034  # Used by commands/backup.sh to print generated password once.
-      BACKUP_LAST_PASSWORD="${password}"
+      core::log error "encryption password required" '{}'
+      return 1
     fi
+  fi
+
+  # A backup must contain both credential state and the matching config stamp.
+  local state_file digest_file
+  state_file="$(state::path)"
+  digest_file="$(state::digest)"
+  if [[ ! -f "${state_file}" || -L "${state_file}" || ! -f "${digest_file}" || -L "${digest_file}" ]]; then
+    core::log error "managed state or config digest missing; refusing incomplete backup" '{}'
+    return 1
   fi
 
   # Load current state
   local state
-  state=$(state::load)
+  state=$(cat "${state_file}") || return 1
+  if ! jq -e '.name == "reality-only"' <<< "${state}" > /dev/null 2>&1; then
+    core::log error "managed REALITY state is invalid" '{}'
+    return 1
+  fi
 
   # Extract metadata from state
   local topology version
@@ -227,7 +251,7 @@ backup::create() {
   # Create temporary directory for backup staging
   # Use hidden prefix to avoid conflicts if cleanup fails (CWE-362)
   local tmpdir
-  tmpdir=$(mktemp -d -t .xray-backup.XXXXXX)
+  tmpdir=$(mktemp -d -t .xray-backup.XXXXXX) || return 1
 
   # Copy configuration files
   local xray_etc
@@ -247,12 +271,15 @@ backup::create() {
   fi
 
   # Copy state file
-  local state_file
-  state_file="$(state::path)"
-  if [[ -f "${state_file}" ]]; then
-    cp "${state_file}" "${tmpdir}/state.json" 2> /dev/null || {
-      core::log warn "failed to copy state file" "$(printf '{"file":"%s"}' "${state_file}")"
-    }
+  if ! cp -p "${state_file}" "${tmpdir}/state.json" 2> /dev/null; then
+    core::log error "failed to copy state file" "$(printf '{"file":"%s"}' "${state_file}")"
+    rm -rf "${tmpdir}" 2> /dev/null || true
+    return 1
+  fi
+  if ! cp -p "${digest_file}" "${tmpdir}/config.sha256" 2> /dev/null; then
+    core::log error "failed to copy configuration digest" '{}'
+    rm -rf "${tmpdir}" 2> /dev/null || true
+    return 1
   fi
 
   # Create tar.gz archive
@@ -272,23 +299,35 @@ backup::create() {
       rm -f "${backup_file}" "${encrypted_file}" 2> /dev/null || true
       return 1
     fi
-    rm -f "${backup_file}" 2> /dev/null || true
+    if ! rm -f "${backup_file}" 2> /dev/null; then
+      core::log error "failed to remove unencrypted staging archive" '{}'
+      rm -f "${encrypted_file}" 2> /dev/null || true
+      return 1
+    fi
     backup_file="${encrypted_file}"
     encrypted=true
   fi
 
   # Set restrictive permissions
-  chmod 0600 "${backup_file}" 2> /dev/null || true
+  if ! chmod 0600 "${backup_file}" 2> /dev/null; then
+    core::log error "failed to restrict backup archive permissions" '{}'
+    rm -f "${backup_file}" "${metadata_file}" 2> /dev/null || true
+    return 1
+  fi
 
   # Calculate backup hash
   local backup_hash
-  backup_hash=$(sha256sum "${backup_file}" | awk '{print $1}')
+  if ! backup_hash=$(sha256sum "${backup_file}" | awk '{print $1}'); then
+    core::log error "failed to hash backup archive" '{}'
+    rm -f "${backup_file}" "${metadata_file}" 2> /dev/null || true
+    return 1
+  fi
 
   # Create metadata
   local backup_size
   backup_size=$(stat -f%z "${backup_file}" 2> /dev/null || stat -c%s "${backup_file}" 2> /dev/null || echo "0")
 
-  jq -n \
+  if ! jq -n \
     --arg name "${name}" \
     --arg ts "${timestamp}" \
     --arg topology "${topology}" \
@@ -307,9 +346,17 @@ backup::create() {
       file: $file,
       encrypted: $encrypted,
       created_at: (now | todate)
-    }' > "${metadata_file}"
+    }' > "${metadata_file}"; then
+    core::log error "failed to write backup metadata" '{}'
+    rm -f "${backup_file}" "${metadata_file}" 2> /dev/null || true
+    return 1
+  fi
 
-  chmod 0600 "${metadata_file}" 2> /dev/null || true
+  if ! chmod 0600 "${metadata_file}" 2> /dev/null; then
+    core::log error "failed to restrict backup metadata permissions" '{}'
+    rm -f "${backup_file}" "${metadata_file}" 2> /dev/null || true
+    return 1
+  fi
 
   core::log info "backup created successfully" "$(printf '{"name":"%s","size":"%s bytes","hash":"%s"}' "${name}" "${backup_size}" "${backup_hash:0:8}")"
 
@@ -441,53 +488,81 @@ backup::list() {
 # Example:
 #   backup::restore "pre-upgrade-20231201-120000"
 ##
-backup::restore() {
-  local name="${1:?backup name required}"
-  local password="${2:-}"
+backup::_restore_rollback() {
+  local recovery="${1}" xray_etc="${2}" was_active="${3}" old_moved="${4}"
+  local had_state="${5}" had_digest="${6}"
+  local failed=false config_ok=true
 
-  local backup_dir
+  if [[ "${old_moved}" == true ]]; then
+    if [[ -e "${xray_etc}" || -L "${xray_etc}" ]]; then
+      rm -rf "${xray_etc}" || {
+        failed=true
+        config_ok=false
+      }
+    fi
+    if [[ "${config_ok}" == true ]]; then
+      mv "${recovery}/old" "${xray_etc}" || {
+        failed=true
+        config_ok=false
+      }
+    fi
+  fi
+  if [[ "${had_state}" == true ]]; then
+    cp -p "${recovery}/state.json" "$(state::path)" || failed=true
+  else
+    rm -f "$(state::path)" || failed=true
+  fi
+  if [[ "${had_digest}" == true ]]; then
+    cp -p "${recovery}/config.sha256" "$(state::digest)" || failed=true
+  else
+    rm -f "$(state::digest)" || failed=true
+  fi
+  if [[ "${config_ok}" == true ]]; then
+    if [[ "${was_active}" == true ]]; then
+      systemctl start xray.service && systemctl is-active --quiet xray.service || failed=true
+    elif systemctl is-active --quiet xray.service 2> /dev/null; then
+      systemctl stop xray.service || failed=true
+    fi
+  fi
+
+  if [[ "${failed}" == true ]]; then
+    core::log error "restore rollback incomplete; recovery retained" "$(printf '{"path":"%s"}' "${recovery}")"
+    return 1
+  fi
+  rm -rf "${recovery}" || return 1
+  core::log warn "restore rolled back" '{}'
+}
+
+backup::_restore_locked() {
+  local name="${1:?backup name required}" password="${2:-}"
+  local backup_dir backup_file metadata_file encrypted=false resolved
   backup_dir="$(backup::dir)"
-
-  # Find backup file
-  local backup_file metadata_file encrypted=false resolved
   if ! resolved="$(backup::_resolve_archive "${name}")"; then
     core::log error "backup not found" "$(printf '{"name":"%s"}' "${name}")"
     return 1
   fi
   IFS=$'\t' read -r backup_file encrypted <<< "${resolved}"
   metadata_file="${backup_dir}/${name}.metadata.json"
-
-  if [[ ! -f "${metadata_file}" ]]; then
+  [[ -f "${metadata_file}" ]] || {
     core::log error "backup metadata not found" "$(printf '{"name":"%s"}' "${name}")"
     return 1
-  fi
+  }
+  backup::verify "${name}" || return 1
 
-  core::log info "restoring from backup" "$(printf '{"name":"%s"}' "${name}")"
-
-  # Verify backup integrity
-  if ! backup::verify "${name}"; then
-    core::log error "backup verification failed" "$(printf '{"name":"%s"}' "${name}")"
+  local xray_etc recovery candidate archive_to_extract target relative release
+  xray_etc="$(xray::confbase)"
+  if [[ ! -L "${xray_etc}/active" || ! -x "$(xray::bin)" ]]; then
+    core::log error "current managed installation is incomplete; refusing restore" '{}'
     return 1
   fi
-
-  # Create automatic backup before restore
-  core::log info "creating pre-restore backup" "{}"
-  local pre_restore_name
-  pre_restore_name="pre-restore-$(date +%Y%m%d-%H%M%S)"
-  if ! backup::create "${pre_restore_name}"; then
-    core::log warn "failed to create pre-restore backup" '{}'
-    # Continue anyway - user explicitly requested restore
-  fi
-
-  # Extract backup to temporary directory
-  # Use hidden prefix to avoid conflicts if cleanup fails
-  local tmpdir
-  tmpdir=$(mktemp -d -t .xray-restore.XXXXXX)
-
-  local archive_to_extract="${backup_file}"
-  if [[ "${encrypted}" == "true" ]]; then
+  recovery="$(mktemp -d "$(dirname "${xray_etc}")/.xray-restore.XXXXXX")" || return 1
+  chmod 0700 "${recovery}" || return 1
+  candidate="${recovery}/candidate"
+  mkdir -m 0700 "${candidate}" || return 1
+  archive_to_extract="${backup_file}"
+  if [[ "${encrypted}" == true ]]; then
     backup::_require_openssl || {
-      rm -rf "${tmpdir}" 2> /dev/null || true
+      rm -rf "${recovery}"
       return 1
     }
     if [[ -z "${password}" ]]; then
@@ -495,88 +570,132 @@ backup::restore() {
         read -rsp "Encryption password: " password
         printf '\n'
       else
-        core::log error "password required for encrypted backup restore" '{"hint":"use xrf backup restore <name> --password <password> or --password-file <file>"}'
-        rm -rf "${tmpdir}" 2> /dev/null || true
+        core::log error "password required for encrypted backup restore" '{}'
+        rm -rf "${recovery}"
         return 1
       fi
     fi
     backup::_validate_password "${password}" || {
-      rm -rf "${tmpdir}" 2> /dev/null || true
+      rm -rf "${recovery}"
       return 1
     }
-    local decrypted_archive="${tmpdir}/decrypted.tar.gz"
-    if ! openssl enc -d -aes-256-cbc -pbkdf2 -in "${backup_file}" -out "${decrypted_archive}" -pass "pass:${password}" 2> /dev/null; then
-      core::log error "failed to decrypt backup archive" "$(printf '{"file":"%s"}' "${backup_file}")"
-      rm -rf "${tmpdir}" 2> /dev/null || true
+    archive_to_extract="${recovery}/decrypted.tar.gz"
+    if ! openssl enc -d -aes-256-cbc -pbkdf2 -in "${backup_file}" -out "${archive_to_extract}" -pass "pass:${password}" 2> /dev/null; then
+      core::log error "failed to decrypt backup archive" '{}'
+      rm -rf "${recovery}"
       return 1
     fi
-    archive_to_extract="${decrypted_archive}"
   fi
-
-  if ! tar -xzf "${archive_to_extract}" -C "${tmpdir}" 2> /dev/null; then
-    core::log error "failed to extract backup" "$(printf '{"file":"%s"}' "${backup_file}")"
-    rm -rf "${tmpdir}" 2> /dev/null || true
+  if ! tar -xzf "${archive_to_extract}" -C "${candidate}" 2> /dev/null; then
+    core::log error "failed to extract backup" '{}'
+    rm -rf "${recovery}"
     return 1
   fi
 
-  # Stop xray service before restore
-  if systemctl is-active --quiet xray.service 2> /dev/null; then
-    core::log info "stopping xray service" "{}"
-    systemctl stop xray.service 2> /dev/null || {
-      core::log warn "failed to stop xray service" "{}"
-    }
+  # The archive's active symlink is absolute. Test its archived release, never
+  # the live release that the symlink still names before installation.
+  target="$(readlink "${candidate}/xray/active" 2> /dev/null || true)"
+  relative="${target#"${xray_etc}/"}"
+  if [[ "${target}" != "${xray_etc}/"* || ! "${relative}" =~ ^releases/[0-9]{14}$ ]]; then
+    core::log error "backup does not contain a current managed active release" '{}'
+    rm -rf "${recovery}"
+    return 1
+  fi
+  release="${candidate}/xray/${relative}"
+  # Only the active pointer may be a symlink. Every directory and config file
+  # that Xray reads must be a physical member of the extracted archive.
+  local linked=""
+  if [[ ! -d "${candidate}/xray" || -L "${candidate}/xray" ||
+    ! -d "${candidate}/xray/releases" || -L "${candidate}/xray/releases" ||
+    ! -d "${release}" || -L "${release}" ]] \
+    || ! linked="$(find "${candidate}/xray/releases" -type l -print -quit)" \
+    || [[ -n "${linked}" || ! -f "${candidate}/state.json" || -L "${candidate}/state.json" ||
+      ! -f "${candidate}/config.sha256" || -L "${candidate}/config.sha256" ]] \
+    || ! jq -e '.name == "reality-only"' "${candidate}/state.json" > /dev/null 2>&1 \
+    || ! "$(xray::bin)" -test -confdir "${release}" -format json > /dev/null 2>&1; then
+    core::log error "backup candidate configuration is invalid" '{}'
+    rm -rf "${recovery}"
+    return 1
   fi
 
-  # Restore xray configuration
-  local xray_etc
-  xray_etc="$(xray::confbase)"
-
-  if [[ -d "${tmpdir}/xray" ]]; then
-    # Backup current configuration
-    if [[ -d "${xray_etc}" ]]; then
-      if ! mv "${xray_etc}" "${xray_etc}.old" 2> /dev/null; then
-        core::log error "failed to backup current configuration" "{}"
-        rm -rf "${tmpdir}" 2> /dev/null || true
+  # A pre-restore archive is required; failure must leave the live service alone.
+  if ! backup::_create_locked "pre-restore-${name}"; then
+    core::log error "pre-restore backup failed" '{}'
+    rm -rf "${recovery}"
+    return 1
+  fi
+  local had_state=false had_digest=false was_active=false old_moved=false
+  if [[ -f "$(state::path)" ]]; then
+    had_state=true
+    cp -p "$(state::path)" "${recovery}/state.json" || {
+      rm -rf "${recovery}"
+      return 1
+    }
+  fi
+  if [[ -f "$(state::digest)" ]]; then
+    had_digest=true
+    cp -p "$(state::digest)" "${recovery}/config.sha256" || {
+      rm -rf "${recovery}"
+      return 1
+    }
+  fi
+  local active_state
+  if ! active_state="$(systemctl show --property=ActiveState --value xray.service)"; then
+    core::log error "failed to query xray service state" '{}'
+    rm -rf "${recovery}"
+    return 1
+  fi
+  case "${active_state}" in
+    active)
+      was_active=true
+      if ! systemctl stop xray.service; then
+        core::log error "failed to stop xray service" '{}'
+        backup::_restore_rollback "${recovery}" "${xray_etc}" "${was_active}" false "${had_state}" "${had_digest}" || return 1
         return 1
       fi
-    fi
-
-    # Restore from backup
-    if ! cp -a "${tmpdir}/xray" "${xray_etc}" 2> /dev/null; then
-      core::log error "failed to restore xray configuration" "{}"
-      # Attempt rollback
-      [[ -d "${xray_etc}.old" ]] && mv "${xray_etc}.old" "${xray_etc}" 2> /dev/null
-      rm -rf "${tmpdir}" 2> /dev/null || true
+      ;;
+    inactive | failed) ;;
+    *)
+      core::log error "unknown xray service state" "$(printf '{"state":"%s"}' "${active_state}")"
+      rm -rf "${recovery}"
       return 1
-    fi
+      ;;
+  esac
 
-    # Remove backup of old configuration
-    rm -rf "${xray_etc}.old" 2> /dev/null || true
+  if ! mv "${xray_etc}" "${recovery}/old"; then
+    core::log error "failed to preserve current configuration" '{}'
+    backup::_restore_rollback "${recovery}" "${xray_etc}" "${was_active}" false "${had_state}" "${had_digest}" || return 1
+    return 1
   fi
-
-  # Restore state file
-  local state_file
-  state_file="$(state::path)"
-
-  if [[ -f "${tmpdir}/state.json" ]]; then
-    io::ensure_dir "$(dirname "${state_file}")" 0755
-    cp "${tmpdir}/state.json" "${state_file}" 2> /dev/null || {
-      core::log warn "failed to restore state file" "$(printf '{"file":"%s"}' "${state_file}")"
-    }
+  old_moved=true
+  local failed=false
+  if ! cp -a "${candidate}/xray" "${xray_etc}"; then
+    failed=true
+  elif ! state::save "$(cat "${candidate}/state.json")"; then
+    failed=true
+  elif ! cp -p "${candidate}/config.sha256" "$(state::digest)"; then
+    failed=true
+  elif [[ "${was_active}" == true ]] && ! systemctl start xray.service; then
+    failed=true
+  elif [[ "${was_active}" == true ]] && ! systemctl is-active --quiet xray.service; then
+    failed=true
   fi
-
-  # Cleanup temporary directory (restoration complete)
-  rm -rf "${tmpdir}" 2> /dev/null || true
-
-  # Start xray service
-  core::log info "starting xray service" "{}"
-  if ! systemctl start xray.service 2> /dev/null; then
-    core::log error "failed to start xray service" '{}'
+  if [[ "${failed}" == true ]]; then
+    core::log error "restore failed; restoring previous installation" '{}'
+    backup::_restore_rollback "${recovery}" "${xray_etc}" "${was_active}" "${old_moved}" "${had_state}" "${had_digest}" || return 1
     return 1
   fi
 
+  rm -rf "${recovery}" || {
+    core::log error "restored but failed to remove recovery directory" "$(printf '{"path":"%s"}' "${recovery}")"
+    return 1
+  }
   core::log info "restoration completed successfully" "$(printf '{"backup":"%s"}' "${name}")"
-  return 0
+}
+
+backup::restore() {
+  local name="${1:?backup name required}"
+  core::with_flock "$(state::lock)" backup::_restore_locked "${name}" "${2:-}"
 }
 
 ##

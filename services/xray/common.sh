@@ -124,45 +124,6 @@ xray::extract_compat_warnings() {
 }
 
 ##
-# Generate a VLESS encryption pair using `xray vlessenc`.
-#
-# Arguments:
-#   $1 - xray binary path (string, required)
-#
-# Output:
-#   Line 1: decryption value
-#   Line 2: encryption value
-#
-# Returns:
-#   0 - Success
-#   1 - Failed to generate or parse values
-##
-xray::generate_vless_encryption_pair() {
-  local xray_bin="${1:-}" output decryption encryption
-
-  [[ -n "${xray_bin}" && -x "${xray_bin}" ]] || return 1
-  output="$("${xray_bin}" vlessenc 2> /dev/null || true)"
-  [[ -n "${output}" ]] || return 1
-
-  decryption="$(
-    printf '%s\n' "${output}" \
-      | grep -oE '"decryption":[[:space:]]*"[^"]+"' \
-      | head -1 \
-      | sed -E 's/.*"([^"]+)"/\1/'
-  )"
-  encryption="$(
-    printf '%s\n' "${output}" \
-      | grep -oE '"encryption":[[:space:]]*"[^"]+"' \
-      | head -1 \
-      | sed -E 's/.*"([^"]+)"/\1/'
-  )"
-
-  [[ -n "${decryption}" && -n "${encryption}" ]] || return 1
-  printf '%s\n%s\n' "${decryption}" "${encryption}"
-  return 0
-}
-
-##
 # Generate a random shortId for Xray Reality
 #
 # Creates a 16-character hexadecimal string using reliable tools.
@@ -196,62 +157,5 @@ xray::generate_shortid() {
 
   # Output the result
   echo "${result}"
-  return 0
-}
-
-##
-# Generate multiple random shortIds for Xray Reality (batch operation)
-#
-# Creates N shortIds in a single operation, reducing subprocess overhead.
-# More efficient than calling xray::generate_shortid() multiple times.
-#
-# Arguments:
-#   $1 - Count of shortIds to generate (integer, required, default: 3)
-#
-# Output:
-#   N lines, each containing a 16-character hexadecimal string to stdout
-#
-# Returns:
-#   0 - Success
-#   1 - All tools failed or invalid count
-#
-# Example:
-#   mapfile -t sids < <(xray::generate_shortids 3)
-#   # sids[0]=a1b2c3d4e5f67890
-#   # sids[1]=1234567890abcdef
-#   # sids[2]=fedcba9876543210
-##
-xray::generate_shortids() {
-  local count="${1:-3}"
-
-  # Validate count
-  if ! [[ "${count}" =~ ^[0-9]+$ ]] || [[ "${count}" -lt 1 ]]; then
-    core::log error "invalid count for shortId generation" "$(printf '{"count":"%s"}' "${count}")"
-    return 1
-  fi
-
-  local bytes=$((count * 8)) # 8 bytes per shortId
-
-  if command -v xxd > /dev/null 2>&1; then
-    # xxd: read all bytes at once, output 16 hex chars per line (8 bytes * 2)
-    # Note: -c 8 means 8 bytes per line, which produces 16 hex characters
-    head -c "${bytes}" /dev/urandom | xxd -p -c 8 | head -n "${count}"
-  elif command -v od > /dev/null 2>&1; then
-    # od: read all bytes, split into 16-char chunks
-    local raw
-    raw="$(head -c "${bytes}" /dev/urandom | od -An -tx1 -v | tr -d ' \n')"
-    for ((i = 0; i < count; i++)); do
-      echo "${raw:$((i * 16)):16}"
-    done
-  elif command -v openssl > /dev/null 2>&1; then
-    # openssl: generate count times (no batch mode for rand)
-    for ((i = 0; i < count; i++)); do
-      openssl rand -hex 8
-    done
-  else
-    core::log error "no suitable tool found for shortId generation" "{}"
-    return 1
-  fi
-
   return 0
 }

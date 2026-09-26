@@ -1,83 +1,45 @@
 # xray-fusion
 
-Bash-based Xray proxy deployment tool with automated certificate management.
+Bash tool for a fresh VLESS + REALITY server with the Vision flow and a single raw-transport inbound. It does not manage Caddy, certificates, plugins, templates, firewall rules, sysctl tuning or a second TLS inbound.
 
-## Quick Reference
+## Quick reference
 
-```bash
-# Development (must pass before commit)
-make fmt          # Format code (shfmt)
-make lint         # Static analysis (shellcheck)
-make test-unit    # Unit tests (bats)
+~~~bash
+make fmt
+make lint
+make test-unit
+make test-integration
 
-# Run locally
-bin/xrf install --topology reality-only
-bin/xrf status
-bin/xrf uninstall
+xrf test-sni your-target.example --target your-target.example:443
+sudo XRAY_SNI=your-target.example xrf install --yes
+sudo xrf links
+sudo xrf status
+sudo xrf upgrade --version latest
+sudo xrf backup create --name before-change
+sudo xrf logs --lines 100
+sudo xrf uninstall
+~~~
 
-# Debug mode
-XRF_DEBUG=true bin/xrf install --topology reality-only
-```
+`XRAY_SNI` is required for fresh install; there is no universal default target. The target probe is advisory. `XRAY_REALITY_DEST` defaults to `<XRAY_SNI>:443`. Install validates local inputs and candidate Xray config, and refuses existing managed artifacts. Upgrade is the binary-only path for a managed installation.
 
-## Project Structure
+`latest` selects the newest published non-draft official Xray-core release, including prereleases. v26.9.9 was the newest verified during this change, not a permanent default. Unknown or legacy configuration formats are not an automatic migration path.
 
-```
-bin/xrf           # CLI entrypoint
-commands/         # High-level workflows (install.sh, status.sh)
-lib/              # Core utilities (core.sh, args.sh, validators.sh)
-modules/          # Helpers (io.sh, state.sh, fw/*, web/*)
-services/xray/    # Xray install/configure/systemd
-plugins/          # Plugin system
-tests/unit/       # bats test files
-```
+## Structure
 
-## Code Style
+| Path | Purpose |
+| --- | --- |
+| `bin/xrf`, `commands/` | CLI and user workflows |
+| `lib/`, `modules/` | Core, state, validation, backup, and I/O helpers |
+| `services/xray/` | Xray install, config rendering, upgrade, systemd unit, links |
+| `scripts/e2e/` | Fresh Docker lifecycle smoke |
+| `tests/unit/`, `tests/integration/` | Bats suites |
 
-- Bash with `set -euo pipefail`
-- 2-space indentation (see `.editorconfig`)
-- Namespacing: `namespace::function` (e.g., `core::log`, `io::atomic_write`)
-- Variables: lowercase `local`, UPPER_SNAKE for exports (`XRF_*`, `XRAY_*`)
+## Coding rules
 
-## Key APIs
+Use Bash strict mode, 2-space indentation, source guards for libraries, explicit module dependencies, and structured `core::log` output in runtime/library paths. Do not add EXIT traps inside utility functions. Prefer `io::atomic_write` for managed files and `core::with_flock` around shared state changes. Use the repository's ShellCheck and shfmt settings; test the production path for behavior changes.
 
-Use these helpers instead of raw implementations:
+State stores full client credentials, with directory mode 0700 and state file mode 0600. `sudo xrf links` prints the client URI. Xray access/error output goes to stdout/stderr and systemd journald. Backups are private and restore only a validated current managed release layout; retain reported recovery material if rollback fails.
 
-| Function | Purpose |
-|----------|---------|
-| `core::log level msg ctx` | Structured logging (always use, never echo) |
-| `core::with_flock lock cmd` | Execute with exclusive file lock |
-| `io::ensure_dir dir mode` | Create directory with sudo fallback |
-| `io::atomic_write file mode` | Atomic file write from stdin |
-| `validators::domain domain` | RFC-compliant domain validation |
-| `xray::generate_shortid` | Generate 16-char hex shortId |
+Local Bats and Docker lifecycle tests do not prove real systemd activation or client interoperability. The Docker smoke uses the official binary and a systemctl mock. Validate the actual client through the VPS separately when needed.
 
-## Development Workflow
-
-Use Test-Driven Development:
-1. Write failing test
-2. Implement until test passes
-3. Run `make fmt && make lint && make test-unit`
-4. Commit
-
-## Critical Rules
-
-**Security**:
-- Verify downloaded code integrity BEFORE execution (CWE-494)
-- Fix both ownership AND permissions for shared files (CWE-283)
-- Use `io::atomic_write` for safe file operations (CWE-362)
-
-**Shell patterns**:
-- Never use EXIT traps in utility functions (breaks pipelines)
-- Source guards required for libraries with readonly variables
-- Explicitly source all module dependencies
-
-**Quality**:
-- All logs to stderr via `core::log`
-- Network operations need retry logic (`core::retry`)
-- Normalize external tool output before parsing (formats change)
-
-## Documentation
-
-- [AGENTS.md](./AGENTS.md) - Technical reference and patterns
-- [docs/adr/](./docs/adr/) - Architecture Decision Records
-- [.claude/](./.claude/) - Claude Code hooks and commands
+See [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md), [tests/README.md](tests/README.md), and [architecture decisions](docs/adr/). Earlier ADRs may document removed product lines as history.

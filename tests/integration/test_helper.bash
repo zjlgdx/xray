@@ -16,6 +16,7 @@ setup_integration_env() {
   export XRF_PREFIX="${TEST_ROOT}/prefix"
   export XRF_ETC="${TEST_ROOT}/etc"
   export XRF_VAR="${TEST_ROOT}/var"
+  export XRF_SYSTEMD_DIR="${TEST_ROOT}/systemd"
 
   mkdir -p "${XRF_PREFIX}" "${XRF_ETC}" "${XRF_VAR}"
 
@@ -25,6 +26,13 @@ setup_integration_env() {
   cat > "${TEST_ROOT}/bin/systemctl" << 'EOF'
 #!/usr/bin/env bash
 echo "systemctl $*" >> "${XRF_VAR}/systemctl.log"
+if [[ "${1:-}" == show ]]; then
+  case "${2:-}" in
+    --property=ActiveState) printf 'inactive\n' ;;
+    --property=UnitFileState) printf '\n' ;;
+    *) exit 1 ;;
+  esac
+fi
 exit 0
 EOF
   chmod +x "${TEST_ROOT}/bin/systemctl"

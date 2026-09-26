@@ -9,6 +9,7 @@ setup() {
   mkdir -p "${XRF_VAR}"
   printf '%s\n' '{"inbounds":[{"port":443,"protocol":"vless"}]}' > "${XRF_ETC}/xray/active/config.json"
   printf '%s\n' '{"name":"reality-only","version":"v1.8.0"}' > "${XRF_VAR}/state.json"
+  printf 'digest\n' > "${XRF_VAR}/config.sha256"
 }
 
 teardown() {

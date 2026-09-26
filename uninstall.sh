@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # xray-fusion online uninstaller
-# Usage: curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/uninstall.sh | bash
+# Usage: curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/uninstall.sh | bash
 
 set -euo pipefail
 
@@ -12,12 +12,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Default values
-REPO_URL="${XRF_REPO_URL:-https://github.com/xrf9268-hue/xray.git}"
-BRANCH="${XRF_BRANCH:-main}"
 INSTALL_DIR="${XRF_INSTALL_DIR:-/usr/local/xray-fusion}"
 
 # Runtime variables
-KEEP_CONFIG=""
 FORCE=""
 DEBUG=""
 REMOVE_INSTALL_DIR=""
@@ -33,17 +30,8 @@ log_debug() { [[ "${DEBUG}" == "true" ]] && echo -e "${BLUE}[DEBUG]${NC} ${*}" |
 # Error handling
 error_exit() {
   log_error "${1}"
-  cleanup
   exit 1
 }
-
-cleanup() {
-  if [[ -n "${TMP_DIR:-}" && -d "${TMP_DIR}" ]]; then
-    rm -rf "${TMP_DIR}"
-  fi
-}
-
-trap cleanup EXIT
 
 # Show help
 show_help() {
@@ -51,11 +39,10 @@ show_help() {
 xray-fusion online uninstaller
 
 Usage:
-  curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/uninstall.sh | bash
-  curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/uninstall.sh | bash -s -- [options]
+  curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/uninstall.sh | bash
+  curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/uninstall.sh | bash -s -- [options]
 
 Options:
-  --keep-config                 Keep configuration files and state
   --remove-install-dir          Remove the entire installation directory
   --force                       Force uninstallation without confirmation
   --debug                       Enable debug output
@@ -63,17 +50,12 @@ Options:
 
 Examples:
   # Complete uninstallation
-  curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/uninstall.sh | bash
-
-  # Keep configuration files
-  curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/uninstall.sh | bash -s -- --keep-config
+  curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/uninstall.sh | bash
 
   # Force uninstallation without confirmation
-  curl -sL https://raw.githubusercontent.com/xrf9268-hue/xray/main/uninstall.sh | bash -s -- --force
+  curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/uninstall.sh | bash -s -- --force
 
 Environment Variables:
-  XRF_REPO_URL      Repository URL (default: https://github.com/xrf9268-hue/xray.git)
-  XRF_BRANCH        Branch to use (default: main)
   XRF_INSTALL_DIR   Installation directory (default: /usr/local/xray-fusion)
 
 EOF
@@ -134,17 +116,12 @@ get_installation_info() {
   local xray_locations=(
     "/usr/local/bin/xray"
     "/usr/local/etc/xray"
-    "/var/log/xray"
     "/etc/systemd/system/xray.service"
   )
 
   for location in "${xray_locations[@]}"; do
     if [[ -e "${location}" ]]; then
-      if [[ "${KEEP_CONFIG}" == "true" && ("${location}" == *"/etc/xray"* || "${location}" == *"config"*) ]]; then
-        echo "  - ${location} (KEPT due to --keep-config)"
-      else
-        echo "  - ${location}"
-      fi
+      echo "  - ${location}"
     fi
   done
   echo ""
@@ -158,7 +135,6 @@ confirm_uninstallation() {
   fi
 
   log_warn "This will completely remove xray-fusion and Xray from your system!"
-  [[ "${KEEP_CONFIG}" == "true" ]] && log_info "Configuration files will be preserved"
 
   # Improved interactive check
   if [[ -t 0 && -t 1 ]]; then
@@ -172,164 +148,25 @@ confirm_uninstallation() {
   fi
 }
 
-# Download uninstall scripts if needed
-download_uninstall_scripts() {
-  # If we can use the installed version, do so
-  if [[ -f "${INSTALL_DIR}/bin/xrf" ]]; then
-    log_debug "Using installed xrf for uninstallation"
-    return 0
-  fi
-
-  log_info "Downloading uninstall scripts..."
-
-  TMP_DIR="$(mktemp -d)"
-  log_debug "Using temporary directory: ${TMP_DIR}"
-
-  # Clone repository (only needed files)
-  if ! git clone --depth 1 --branch "${BRANCH}" "${REPO_URL}" "${TMP_DIR}/xray-fusion" 2> /dev/null; then
-    log_warn "Failed to download from repository, attempting manual uninstallation"
-    return 1
-  fi
-
-  log_info "Downloaded uninstall scripts"
-  return 0
-}
-
-# Stop and remove systemd service
-remove_systemd_service() {
-  log_info "Removing systemd service..."
-
-  # Stop service if running
-  if systemctl is-active --quiet xray 2> /dev/null; then
-    log_info "Stopping Xray service..."
-    systemctl stop xray || log_warn "Failed to stop xray service"
-  fi
-
-  # Disable service if enabled
-  if systemctl is-enabled --quiet xray 2> /dev/null; then
-    log_info "Disabling Xray service..."
-    systemctl disable xray || log_warn "Failed to disable xray service"
-  fi
-
-  # Remove service file
-  if [[ -f /etc/systemd/system/xray.service ]]; then
-    rm -f /etc/systemd/system/xray.service
-    systemctl daemon-reload
-    log_info "Removed systemd service file"
-  fi
-}
-
-# Run xray-fusion uninstall
+# Uninstall through the installed command so its shared lock protects state/config.
 run_xrf_uninstall() {
-  local xrf_cmd=""
-
-  # Determine which xrf command to use
-  if [[ -f "${INSTALL_DIR}/bin/xrf" ]]; then
-    xrf_cmd="${INSTALL_DIR}/bin/xrf"
-  elif [[ -f "${TMP_DIR}/xray-fusion/bin/xrf" ]]; then
-    xrf_cmd="${TMP_DIR}/xray-fusion/bin/xrf"
-  elif command -v xrf > /dev/null 2>&1; then
-    xrf_cmd="xrf"
-  else
-    log_warn "No xrf command available, performing manual uninstallation"
+  if [[ ! -x "${INSTALL_DIR}/bin/xrf" ]]; then
+    log_error "Installed xrf command is unavailable: ${INSTALL_DIR}/bin/xrf"
     return 1
   fi
-
   log_info "Running xray-fusion uninstall..."
-
-  # Change to appropriate directory
-  if [[ -d "${INSTALL_DIR}" ]]; then
-    cd "${INSTALL_DIR}"
-  elif [[ -d "${TMP_DIR}/xray-fusion" ]]; then
-    cd "${TMP_DIR}/xray-fusion"
-  fi
-
-  # Run uninstall command
-  if "${xrf_cmd}" uninstall 2> /dev/null; then
-    log_info "xray-fusion uninstall completed"
-    return 0
-  else
-    log_warn "xrf uninstall failed, continuing with manual cleanup"
-    return 1
-  fi
+  "${INSTALL_DIR}/bin/xrf" uninstall || return 1
+  log_info "xray-fusion uninstall completed"
 }
 
 # Clean up symlinks
 cleanup_symlinks() {
-  log_info "Cleaning up symlinks..."
-  local cleanup_count=0
-
-  # Clean up xrf symlinks
-  for link_path in /usr/local/bin/xrf /usr/bin/xrf; do
-    if [[ -L "${link_path}" ]]; then
-      local target
-      target="$(readlink "${link_path}" 2> /dev/null || true)"
-      # Remove if target contains xray-fusion or if target doesn't exist
-      if [[ "${target}" == *"xray-fusion"* ]] || [[ ! -e "${target}" ]]; then
-        if rm -f "${link_path}"; then
-          cleanup_count=$((cleanup_count + 1))
-        fi
-        log_debug "Removed symlink: ${link_path}"
-      fi
-    fi
-  done
-
-  [[ ${cleanup_count} -gt 0 ]] && log_info "Cleaned up ${cleanup_count} symlinks"
-}
-
-# Manual cleanup
-manual_cleanup() {
-  log_info "Performing manual cleanup..."
-
-  local cleanup_count=0
-
-  # Remove global xrf symlink
-  if [[ -L /usr/local/bin/xrf ]]; then
-    if rm -f /usr/local/bin/xrf; then
-      cleanup_count=$((cleanup_count + 1))
-    fi
-    log_debug "Removed /usr/local/bin/xrf"
+  local link_path="${1:-/usr/local/bin/xrf}"
+  if [[ -L "${link_path}" && "$(readlink "${link_path}")" == "${INSTALL_DIR}/bin/xrf" ]]; then
+    rm -f "${link_path}" || return 1
+    log_debug "Removed own symlink: ${link_path}"
   fi
-
-  # Remove Xray binary
-  if [[ -f /usr/local/bin/xray ]]; then
-    if rm -f /usr/local/bin/xray; then
-      cleanup_count=$((cleanup_count + 1))
-    fi
-    log_debug "Removed /usr/local/bin/xray"
-  fi
-
-  # Remove Xray configuration (unless keeping config)
-  if [[ "${KEEP_CONFIG}" != "true" ]]; then
-    if [[ -d /usr/local/etc/xray ]]; then
-      if rm -rf /usr/local/etc/xray; then
-        cleanup_count=$((cleanup_count + 1))
-      fi
-      log_debug "Removed /usr/local/etc/xray"
-    fi
-  else
-    log_info "Preserving Xray configuration files"
-  fi
-
-  # Remove log directory
-  if [[ -d /var/log/xray ]]; then
-    if rm -rf /var/log/xray; then
-      cleanup_count=$((cleanup_count + 1))
-    fi
-    log_debug "Removed /var/log/xray"
-  fi
-
-  # Remove logrotate configuration
-  if [[ -f /etc/logrotate.d/xray-fusion ]]; then
-    if rm -f /etc/logrotate.d/xray-fusion; then
-      cleanup_count=$((cleanup_count + 1))
-    fi
-    log_debug "Removed logrotate configuration"
-  fi
-
-  # Note: Symlinks are handled by cleanup_symlinks() function
-
-  log_info "Manual cleanup completed, cleaned up ${cleanup_count} items"
+  return 0
 }
 
 # Remove installation directory
@@ -349,18 +186,11 @@ show_summary() {
   log_info "Uninstallation Summary:"
   echo "  ✓ Systemd service removed"
   echo "  ✓ Xray binary removed"
-  [[ "${KEEP_CONFIG}" == "true" ]] && echo "  ✓ Configuration files preserved" || echo "  ✓ Configuration files removed"
-  echo "  ✓ Log files removed"
-  echo "  ✓ Global xrf command removed"
+  echo "  ✓ Configuration files removed"
+  echo "  ✓ Owned global xrf link removed if present"
   [[ "${REMOVE_INSTALL_DIR}" == "true" ]] && echo "  ✓ Installation directory removed" || echo "  ✓ Installation directory preserved"
   echo ""
   log_info "xray-fusion has been successfully uninstalled!"
-
-  if [[ "${KEEP_CONFIG}" == "true" ]]; then
-    echo ""
-    log_info "Configuration files were preserved. To complete removal:"
-    echo "  sudo rm -rf /usr/local/etc/xray"
-  fi
 
   if [[ "${REMOVE_INSTALL_DIR}" != "true" && -d "${INSTALL_DIR}" ]]; then
     echo ""
@@ -373,10 +203,6 @@ show_summary() {
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case ${1} in
-      --keep-config)
-        KEEP_CONFIG="true"
-        shift
-        ;;
       --remove-install-dir)
         REMOVE_INSTALL_DIR="true"
         shift
@@ -394,8 +220,8 @@ parse_args() {
         exit 0
         ;;
       *)
-        log_warn "Unknown option: ${1}"
-        shift
+        log_error "Unknown option: ${1}"
+        return 2
         ;;
     esac
   done
@@ -403,6 +229,7 @@ parse_args() {
 
 # Main function
 main() {
+  parse_args "${@}" || return $?
   echo -e "${RED}"
   cat << 'EOF'
  ██╗  ██╗██████╗  █████╗ ██╗   ██╗      ███████╗██╗   ██╗███████╗██╗ ██████╗ ███╗   ██╗
@@ -418,8 +245,6 @@ EOF
 
   # Check if running as root (233boy style)
   [[ ${EUID} -ne 0 ]] && error_exit "Not running as ROOT user, please run this script with sudo"
-
-  parse_args "${@}"
 
   local rc
   if check_installation; then
@@ -439,15 +264,9 @@ EOF
     log_debug "exit rc=${rc}"
     exit "${rc}"
   fi
-  download_uninstall_scripts
-  remove_systemd_service
+  run_xrf_uninstall || error_exit "Installed xrf uninstall failed; no manual cleanup was attempted"
 
-  # Try xrf uninstall first, fallback to manual cleanup
-  if ! run_xrf_uninstall; then
-    manual_cleanup
-  fi
-
-  # Always clean up symlinks after uninstall (whether xrf succeeded or not)
+  # Remove only the global link created for this selected installation.
   cleanup_symlinks
 
   remove_installation_directory

@@ -26,6 +26,7 @@ SCRIPT
   export XRAY_UUID="11111111-1111-4111-8111-111111111111"
   export XRAY_SHORT_ID="abcd1234"
   export XRAY_PRIVATE_KEY="test-private-key"
+  export XRAY_SNI="www.microsoft.com"
   export XRAY_REALITY_DEST="www.microsoft.com:443"
 }
 
@@ -77,7 +78,7 @@ SCRIPT
   export XRF_IPV6_IF_INET6_PATH="${TEST_TMPDIR}/proc/net/if_inet6"
   write_mock_ip "loopback"
 
-  run "${PROJECT_ROOT}/services/xray/configure.sh" --topology reality-only
+  run "${PROJECT_ROOT}/services/xray/configure.sh"
   [ "${status}" -eq 0 ]
 
   run jq -r '.inbounds[0].listen' "${XRF_ETC}/xray/active/05_inbounds.json"
@@ -95,7 +96,7 @@ SCRIPT
   export XRF_IPV6_IF_INET6_PATH="${TEST_TMPDIR}/proc/net/if_inet6"
   write_mock_ip "global"
 
-  run "${PROJECT_ROOT}/services/xray/configure.sh" --topology reality-only
+  run "${PROJECT_ROOT}/services/xray/configure.sh"
   [ "${status}" -eq 0 ]
 
   run jq -r '.inbounds[0].listen' "${XRF_ETC}/xray/active/05_inbounds.json"

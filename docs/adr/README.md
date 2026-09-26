@@ -1,6 +1,10 @@
 # Architecture Decision Records (ADR)
 
 This directory contains Architecture Decision Records for the xray-fusion project.
+The dates and accepted statuses record decisions at the time. Certificate sync,
+Caddy, plugin, dual-topology, and older-version reviews are historical; they do
+not describe the current REALITY-only product. Use the root README and current
+configuration verification document for present behavior.
 
 ## Index
 

@@ -18,7 +18,6 @@ fi
 # Source core modules for testing
 source "${PROJECT_ROOT}/lib/core.sh"
 source "${PROJECT_ROOT}/lib/args.sh"
-source "${PROJECT_ROOT}/lib/plugins.sh"
 
 # Compatibility: older bats-core versions do not ship bats_require_minimum_version.
 if ! declare -F bats_require_minimum_version > /dev/null 2>&1; then
