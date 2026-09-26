@@ -470,3 +470,39 @@ teardown() {
   run backup::list
   [[ "$output" == *"No backups found"* ]] || [[ "$output" != *"integration-test"* ]]
 }
+
+@test "backup::_cleanup_old - retains newest archives regardless of custom prefix" {
+  # Opposing names and deterministic mtimes distinguish time order from name order.
+  export XRF_VAR="${TEST_TMPDIR}/var with spaces"
+  local backup_dir
+  backup_dir="$(backup::dir)"
+  create_mock_backup "z-20240101-000000"
+  create_mock_backup "y-20240102-000000"
+  mv "${backup_dir}/y-20240102-000000.tar.gz" "${backup_dir}/y-20240102-000000.tar.gz.enc"
+  touch -t 202401010000 "${backup_dir}/z-20240101-000000.tar.gz"
+  touch -t 202401020000 "${backup_dir}/y-20240102-000000.tar.gz.enc"
+
+  local i name
+  for ((i = 1; i <= BACKUP_RETENTION; i++)); do
+    name="a-${i}-20240201-000000"
+    create_mock_backup "${name}"
+    if ((i % 2 == 0)); then
+      mv "${backup_dir}/${name}.tar.gz" "${backup_dir}/${name}.tar.gz.enc"
+      touch -t 202402010000 "${backup_dir}/${name}.tar.gz.enc"
+    else
+      touch -t 202402010000 "${backup_dir}/${name}.tar.gz"
+    fi
+  done
+
+  run backup::_cleanup_old
+  [ "$status" -eq 0 ]
+  [ ! -e "${backup_dir}/z-20240101-000000.tar.gz" ]
+  [ ! -e "${backup_dir}/z-20240101-000000.metadata.json" ]
+  [ ! -e "${backup_dir}/y-20240102-000000.tar.gz.enc" ]
+  [ ! -e "${backup_dir}/y-20240102-000000.metadata.json" ]
+  for ((i = 1; i <= BACKUP_RETENTION; i++)); do
+    name="a-${i}-20240201-000000"
+    [ -f "${backup_dir}/${name}.metadata.json" ]
+    [ -f "${backup_dir}/${name}.tar.gz" ] || [ -f "${backup_dir}/${name}.tar.gz.enc" ]
+  done
+}

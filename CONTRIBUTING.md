@@ -82,6 +82,12 @@ make lint
 make fmt
 ```
 
+For backup retention changes, use fixed archive modification times and custom
+prefixes whose alphabetical order differs from time order. For health JSON,
+parse stdout with `jq -e` and include multiple compatibility warnings; do not
+mix stderr diagnostics into the report. Deep config validation reuses one syntax
+pass and merged value; public layer validators must remain independently usable.
+
 If `make test-unit` fails before running any tests with a `/dev/fd/...` error, your
 environment is missing the file-descriptor filesystem that bats-core expects.
 On Linux, restore it with `sudo ln -sf /proc/self/fd /dev/fd`.
