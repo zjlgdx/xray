@@ -894,12 +894,17 @@ download_project() {
 install_xray_fusion() {
   log_info "Installing xray-fusion to ${INSTALL_DIR}..."
 
-  # Create installation directory
-  if [[ -d "${INSTALL_DIR}" ]]; then
-    INSTALL_DIR_PREEXISTING="true"
-  else
-    INSTALL_DIR_PREEXISTING="false"
+  # The online wrapper only installs a fresh tool. A repeat invocation must
+  # leave the existing command available for xrf upgrade or recovery.
+  if [[ -e "${INSTALL_DIR}" || -L "${INSTALL_DIR}" ]]; then
+    log_error "Existing xray-fusion tool at ${INSTALL_DIR}; use xrf upgrade or uninstall it first"
+    return 1
   fi
+  if [[ -e "${SYMLINK_PATH}" || -L "${SYMLINK_PATH}" ]]; then
+    log_error "Existing global command at ${SYMLINK_PATH}; refusing to replace it"
+    return 1
+  fi
+  INSTALL_DIR_PREEXISTING="false"
   mkdir -p "${INSTALL_DIR}"
 
   INSTALL_MARKER="${INSTALL_DIR}/.install_in_progress"
@@ -913,9 +918,6 @@ install_xray_fusion() {
   find "${INSTALL_DIR}" -name "*.sh" -type f -exec chmod +x {} \;
 
   # Create symlink for global access
-  if [[ -L "${SYMLINK_PATH}" ]]; then
-    rm -f "${SYMLINK_PATH}"
-  fi
   ln -sf "${INSTALL_DIR}/bin/xrf" "${SYMLINK_PATH}"
 
   # Verify symlink creation
@@ -932,7 +934,7 @@ install_xray_fusion() {
 cleanup_partial_installation() {
   log_warn "Cleaning up partial installation"
 
-  if [[ -L "${SYMLINK_PATH}" ]]; then
+  if [[ "${INSTALL_DIR_PREEXISTING}" != "true" && -L "${SYMLINK_PATH}" ]]; then
     local target
     target="$(readlink -f "${SYMLINK_PATH}" 2> /dev/null || true)"
     local expected_target

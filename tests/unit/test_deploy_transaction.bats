@@ -68,6 +68,15 @@ setup() {
   [ ! -e "${NEW}/active" ]
 }
 
+@test "deploy preserves established state directory permissions" {
+  printf '%s\n' '{"log":{"loglevel":"info"}}' > "${NEW}/00_log.json"
+  chmod 0755 "${XRF_VAR}"
+  run deploy_release "$NEW"
+  [ "$status" -eq 0 ]
+  perms="$(stat -c '%a' "${XRF_VAR}" 2> /dev/null || stat -f '%Lp' "${XRF_VAR}")"
+  [ "$perms" = 755 ]
+}
+
 teardown() { cleanup_test_env; }
 
 @test "log rendering preserves existing paths, level and extra fields" {

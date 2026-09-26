@@ -612,7 +612,10 @@ deploy_release() {
     core::log info "configuration and deployed binary unchanged" '{}'
     return 0
   fi
-  io::ensure_dir "$(state::dir)" 0700 || return 1
+  # Keep the established state parent mode; only this recovery snapshot is private.
+  if [[ ! -d "$(state::dir)" ]]; then
+    io::ensure_dir "$(state::dir)" 0755 || return 1
+  fi
   saved="$(mktemp -d "$(state::dir)/deploy.XXXXXX")" || return 1
   chmod 0700 "${saved}" || return 1
   if [[ -L "$(xray::active)" ]]; then

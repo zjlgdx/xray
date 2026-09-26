@@ -139,7 +139,51 @@ EOF
   '
 
   [ "${status}" -eq 0 ]
-  [[ "${output}" == *"RESULT:present|present|missing|missing" ]]
+  [[ "${output}" == *"RESULT:present|present|present|missing" ]]
+}
+
+@test "install.sh - refuses existing tool before replacing its files or global link" {
+  local workdir="${TEST_TMPDIR}/existing-tool"
+  mkdir -p "${workdir}/downloaded/xray-fusion/bin" "${workdir}/install/bin" "${workdir}/bin"
+  printf 'new tool\n' > "${workdir}/downloaded/xray-fusion/bin/xrf"
+  printf 'old tool\n' > "${workdir}/install/bin/xrf"
+  printf 'credential\n' > "${workdir}/install/credentials"
+  ln -s "${workdir}/install/bin/xrf" "${workdir}/bin/xrf"
+
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/downloaded"
+    INSTALL_DIR="$2/install"
+    SYMLINK_PATH="$2/bin/xrf"
+    install_xray_fusion
+  ' _ "${PROJECT_ROOT}" "${workdir}"
+
+  [ "${status}" -ne 0 ]
+  [ "$(cat "${workdir}/install/bin/xrf")" = 'old tool' ]
+  [ "$(cat "${workdir}/install/credentials")" = 'credential' ]
+  [ "$(readlink "${workdir}/bin/xrf")" = "${workdir}/install/bin/xrf" ]
+  [ ! -e "${workdir}/install/.install_in_progress" ]
+}
+
+@test "install.sh - refuses unrelated global link before creating fresh tool" {
+  local workdir="${TEST_TMPDIR}/unrelated-global-link"
+  mkdir -p "${workdir}/downloaded/xray-fusion/bin" "${workdir}/other/bin" "${workdir}/bin"
+  printf 'new tool\n' > "${workdir}/downloaded/xray-fusion/bin/xrf"
+  printf 'other tool\n' > "${workdir}/other/bin/xrf"
+  ln -s "${workdir}/other/bin/xrf" "${workdir}/bin/xrf"
+
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/downloaded"
+    INSTALL_DIR="$2/install"
+    SYMLINK_PATH="$2/bin/xrf"
+    install_xray_fusion
+  ' _ "${PROJECT_ROOT}" "${workdir}"
+
+  [ "${status}" -ne 0 ]
+  [ ! -e "${workdir}/install" ]
+  [ "$(readlink "${workdir}/bin/xrf")" = "${workdir}/other/bin/xrf" ]
+  [ "$(cat "${workdir}/other/bin/xrf")" = 'other tool' ]
 }
 
 @test "install.sh - run_xray_install stops before execution when integrity is not verified" {
