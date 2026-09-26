@@ -7,7 +7,8 @@ One-command VLESS + REALITY + Vision deployment with private client credentials.
 
 ## Quick Start
 
-Choose a REALITY target that you have verified with `xrf test-sni`. Set its SNI
+Choose a REALITY target that you have verified, for example with
+`./bin/xrf test-sni <sni> --target <host:port>` from a source checkout. Set its SNI
 explicitly; `XRAY_REALITY_DEST` defaults to `<XRAY_SNI>:443`. The diagnostic checks
 the actual target host and port with that SNI for TLS 1.3, HTTP/2, and redirects.
 It is advisory: installation validates local inputs and Xray configuration, not
@@ -21,7 +22,10 @@ sudo xrf status
 ```
 
 A fresh install uses the newest published non-draft Xray release, including
-prereleases. Existing installations use `sudo xrf upgrade --version latest`.
+prereleases. The newest verified for this change was v26.9.9; the default is
+not pinned to that tag. Existing installations use
+`sudo xrf upgrade --version latest`. Legacy or unknown configuration layouts
+are not automatically migrated.
 
 ## Commands
 
@@ -32,14 +36,14 @@ prereleases. Existing installations use `sudo xrf upgrade --version latest`.
 | `xrf logs` | View logs |
 | `xrf health` | Health check |
 | `xrf upgrade --version vX.Y.Z` | Upgrade the core while preserving configuration |
-| `xrf backup` | Create, verify, list, and restore configuration backups |
+| `xrf backup` | Create, verify, list, and restore current managed-layout backups |
 | `xrf test-sni` | Diagnose an explicit REALITY target |
 | `xrf uninstall` | Remove installation |
 
 ## Uninstall
 
 ```bash
-xrf uninstall
+sudo xrf uninstall
 ```
 
 ## Requirements
@@ -47,6 +51,7 @@ xrf uninstall
 - Linux (Ubuntu/Debian/CentOS)
 - systemd
 - 64-bit architecture
+- Git for the online installer
 
 ## Documentation
 
@@ -79,7 +84,7 @@ Backups contain credentials and are stored in directories accessible only to the
 An interrupted machine or rollback failure may still require manual recovery from the
 reported backup; backups are retained until the operator removes them.
 
-`xrf install` refuses an existing active configuration. It is a fresh-install command,
+`xrf install` refuses existing managed artifacts. It is a fresh-install command,
 not a way to upgrade or regenerate a live server's credentials. For configuration-only
 changes, the renderer validates before switching the active directory and restores the
 previous active directory if restart fails. A core change is not skipped merely because

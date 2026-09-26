@@ -30,7 +30,7 @@ Detailed patterns and conventions for xray-fusion development.
 
 Run these checks based on what you changed:
 
-- `lib/**`, `modules/**`, `commands/**`, `services/**`, `plugins/**`, `bin/**`:
+- `lib/**`, `modules/**`, `commands/**`, `services/**`, `bin/**`:
   `make fmt && make lint && make test-unit`
 - `.github/workflows/**`, `.github/dependabot.yml`:
   `bats -t tests/unit/test_github_metadata.bats`
@@ -50,7 +50,7 @@ make test
 - Supported modes:
   - Host shell on Linux/macOS
   - Windows via WSL Linux filesystem
-  - Optional [`thin-devbox-shell`](https://github.com/xrf9268-hue/thin-devbox-shell) for a reproducible shell layer
+- Optional [`thin-devbox-shell`](https://github.com/xrf9268-hue/thin-devbox-shell) for a reproducible shell layer
 - Keep the project workflow environment-agnostic. Repository docs and prompts must still work when `devbox` is not used.
 - Run Docker lifecycle and online-install validation from fresh host Docker containers. Do not reuse prior test containers or assume Docker-in-Docker support.
 
@@ -90,7 +90,7 @@ validators::domain "example.com" || exit 1
 ### Xray Utilities (`services/xray/common.sh`)
 
 ```bash
-# Generate 16-char hex shortId (uses xxd → od → openssl fallback)
+# Generate a 16-character hexadecimal shortId
 shortid=$(xray::generate_shortid)
 ```
 
@@ -159,10 +159,11 @@ fi
 make fmt && make lint && make test-unit
 
 # Run specific test file
-bats -t tests/unit/test-core.bats
+bats -t tests/unit/test_core_functions.bats
 
-# Test with sandbox paths
-XRF_PREFIX=$PWD/tmp/prefix XRF_ETC=$PWD/tmp/etc bin/xrf install --topology reality-only
+# Run a manual install only inside a disposable Linux container or VM;
+# the installer also manages a service user and systemd unit.
+XRAY_SNI=your-tested-target.example bin/xrf install --yes
 
 # Local e2e smoke test (Docker)
 scripts/e2e/install-lifecycle-smoke.sh
@@ -176,30 +177,26 @@ scripts/e2e/install-lifecycle-smoke.sh
 
 ## Xray Configuration
 
-### Ports
-- **Reality**: 443 (standard HTTPS)
-- **Vision**: 8443 (real TLS)
-- **Caddy HTTPS**: 8444
+### Managed Inbound
 
-### Certificate Permissions
-```bash
-chmod 644 fullchain.pem
-chmod 640 privkey.pem
-chown root:xray *.pem
-```
-
-### TLS Settings
-```json
-{
-  "minVersion": "1.3",
-  "alpn": ["h2", "http/1.1"]
-}
-```
+- One VLESS + REALITY inbound on port 443 by default, using raw transport and
+  the `xtls-rprx-vision` flow. There is no separate TLS/Vision inbound.
+- `XRAY_SNI` is required with no built-in default; `XRAY_REALITY_DEST` defaults
+  to `<XRAY_SNI>:443`. `xrf test-sni` is an explicit network diagnostic.
+- The current `latest` release resolver includes published prereleases. The
+  version verified during this change was v26.9.9; do not hard-code it as latest.
+- Xray stdout/stderr goes to journald. No managed file-log, logrotate, Caddy,
+  certificate, plugin, template, firewall, or sysctl path remains.
+- State contains full connection credentials: directory mode 0700 and state file
+  mode 0600. Client links require authorized access, normally `sudo xrf links`.
+- Fresh install rejects managed artifacts; binary changes use `xrf upgrade`.
+  Backup/restore accepts the current managed release layout only.
 
 ### Key Concepts
 - REALITY does not require domain ownership (SNI is for camouflage)
-- Use `systemctl restart xray` after cert updates (no reload support)
-- shortIds is a server pool, not per-client requirement
+- Test the actual client through the VPS after an upgrade; configuration tests
+  and mocked systemctl lifecycle checks do not prove interoperability.
+- `shortIds` is a server pool; client URIs carry the selected shortId.
 
 ## Function Documentation
 
@@ -238,22 +235,6 @@ make fmt && make lint && make test-unit
 - After every push or PR update, also review new PR reviews, review comments, and bot suggestions for the pushed commit.
 - Treat actionable review findings as required follow-up work: validate whether they still apply on `HEAD`, fix or respond with evidence, rerun relevant local validation, and push follow-up commits until there is no unresolved blocking review feedback.
 - Do not stop at reporting CI failures unless the user explicitly asks to pause.
-
-## Plugin System
-
-### Metadata (Required)
-
-```bash
-XRF_PLUGIN_ID="my-plugin"
-XRF_PLUGIN_VERSION="1.0.0"
-XRF_PLUGIN_DESC="Description"
-XRF_PLUGIN_HOOKS=("configure_post" "deploy_post")
-XRF_PLUGIN_DEPS=("curl" "jq")  # optional, auto-installed
-```
-
-### Hooks
-
-`configure_pre` | `configure_post` | `deploy_post` | `service_setup` | `service_remove` | `links_render` | `uninstall_pre`
 
 ## Common Pitfalls
 

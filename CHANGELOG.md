@@ -7,44 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- **Multi-stage improvement plan** based on comprehensive code review (docs/IMPROVEMENT_PLAN.md)
-- **Centralized configuration management** (lib/defaults.sh) - Single source of truth for all default values
-- **Standardized error code definitions** (lib/errors.sh) - Consistent error handling across all scripts
-- **Integration test framework** (tests/integration/) - Foundation for comprehensive integration testing
-- **ShellDoc-style API documentation** - 19 core functions now fully documented
-- **Fatal and critical log levels** - Better distinction between recoverable and unrecoverable errors
-- **Enhanced domain validation**:
-  - IPv6 private address detection (::1, fc00::/7, fe80::/10) - RFC 4193, RFC 4291
-  - RFC 6761 special-use domain rejection (.test, .invalid)
-  - RFC 3927 link-local address rejection (169.254.0.0/16)
-- **TLS certificate verification helper** (verify_tls_certificates) - Improved code modularity
-
 ### Changed
-- **Certificate sync lock file location** - From /var/lock to /var/lib/xray-fusion/locks/ for persistence
-- **ShortId generation** - Uses xxd → od → openssl priority chain instead of unreliable hexdump
-- **Path validation** - Tightened regex to reject `..` and `//` patterns
-- **Certificate lookup optimization** - Reduced maxdepth from 4 to 3 (~25% performance improvement)
-- **Error handling in ERR trap** - Uses `critical` level instead of `error`
-- **Log output formatting** - Increased column width from %-5s to %-8s for fatal/critical
+- Fresh installation renders one VLESS + REALITY inbound with raw transport and the Vision flow. An explicit `XRAY_SNI` is required; no target site is built in.
+- `latest` resolves the newest published non-draft official Xray-core release, including prereleases. The newest verified for this change was v26.9.9; the product does not pin that tag.
+- Existing managed installations use binary-only `xrf upgrade`; fresh install refuses existing artifacts. Legacy or unknown layouts are not automatically migrated.
+- Xray access/error output is collected by systemd journald. Client links are VLESS URIs read from private state (directory 0700, state file 0600).
+- Backup creation and restore require the current managed REALITY layout, private state, and configuration digest. Restore validates the archived release before stopping Xray and retains bounded recovery material when rollback cannot finish.
+- The online installer uses one Git clone path with commit and applicable tag-signature checks; the default repository is zjlgdx/xray.
 
-### Fixed
-- **Domain validator security** - Now rejects all RFC-defined private and special-use addresses
-- **Lock file ownership** - Handles mixed sudo/non-sudo scenarios correctly (CWE-283)
-- **ShortId generation consistency** - All methods now produce 16-character hexadecimal strings
-- **Fatal error patterns** - Converted 5 error+exit patterns to single `fatal` log calls
+### Removed
+- Dual-topology/TLS inbound, Caddy and certificate synchronization, plugin/template/standalone export commands, automatic firewall and sysctl changes, file-log/logrotate branch, and unsupported online `--keep-config`.
 
-### Security
-- **Enhanced input validation** - Comprehensive domain name validation with RFC compliance
-- **Improved lock file security** - Atomic creation with install(1) to prevent TOCTOU (CWE-362)
-- **Stricter path validation** - Prevents directory traversal and injection attacks
-- **Ownership verification** - Lock files always writable by legitimate users
-
-### Documentation
-- **Function Documentation Standard** added to AGENTS.md
-- **API documentation** for lib/validators.sh, lib/core.sh, modules/io.sh
-- **Security considerations** documented with CWE references
-- **Usage examples** for all public functions
+### Verification
+- Local unit suite: 977 passed, 16 skipped; integration suite: 28 passed, 1 skipped.
+- Fresh Ubuntu Docker lifecycle: five scenarios passed with official Xray v26.9.9; systemctl was mocked while the Xray service user ran the real configuration test.
+- These checks do not prove a real systemd service or client-to-VPS connection. GitHub Actions had not run for this change at the time of this entry.
 
 ---
 
@@ -133,7 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic logging framework
 - Core utility functions (lib/core.sh)
 
-[Unreleased]: https://github.com/xrf9268-hue/xray/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/xrf9268-hue/xray/releases/tag/v1.0.0
-[0.9.0]: https://github.com/xrf9268-hue/xray/compare/v0.1.0...v0.9.0
-[0.1.0]: https://github.com/xrf9268-hue/xray/releases/tag/v0.1.0
+[Unreleased]: https://github.com/zjlgdx/xray/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/zjlgdx/xray/releases/tag/v1.0.0
+[0.9.0]: https://github.com/zjlgdx/xray/compare/v0.1.0...v0.9.0
+[0.1.0]: https://github.com/zjlgdx/xray/releases/tag/v0.1.0

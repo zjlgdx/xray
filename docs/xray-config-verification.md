@@ -1,150 +1,37 @@
-# Xray Configuration Verification Report
+# Xray Configuration Verification
 
-**Date**: 2026-02-28
-**Xray Stable Baseline**: v26.2.6 (released 2026-02-06)
-**Project**: xray-fusion
+This document describes the current generated server configuration and the evidence available on 2026-09-26. The earlier v26.2.6 dual-topology verification is historical and no longer describes this product.
 
----
+## Managed configuration
 
-## Executive Summary
+A fresh install renders one VLESS inbound with the Vision flow (`xtls-rprx-vision`), `decryption: none`, `streamSettings.network: raw`, and `security: reality`. REALITY settings use `target`, `serverNames`, `privateKey`, and a shortId pool. No separate TLS inbound, certificate, Caddy fallback, plugin, template, or optional VLESS-encryption mode is generated. The client URI contains the corresponding Vision flow, public key, selected shortId, SNI, fingerprint and address.
 
-✅ **Overall Status**: **COMPLIANT WITH v26.2.6 STABLE BEST PRACTICES**
+`XRAY_SNI` is required and has no built-in site default. If `XRAY_REALITY_DEST` is omitted, target is `<XRAY_SNI>:443`. Before installation, operators should probe the intended host:port and SNI for TLS 1.3, HTTP/2 and no redirect using `xrf test-sni`. The probe is advisory because external reachability can change. Installation hard-validates input and the candidate Xray configuration.
 
-Current Vision/REALITY deployment remains valid on v26.2.6. This round adds stronger operational compatibility controls:
+Xray access/error output uses stdout/stderr and systemd journald. Config and service files are readable by the Xray service user; complete connection credentials remain in root-private state (directory 0700, file 0600). The service user successfully ran the Xray `-test` check in the isolated Ubuntu lifecycle smoke.
 
-1. `latest` version resolution hardening (`jq` preferred + fallback parser + retry).
-2. Main release ZIP download retry.
-3. Compatibility warnings surfaced in deploy and health checks.
-4. Optional VLESS Encryption support for Reality inbound/link output (default disabled).
+## Version and source evidence
 
----
+The shared `latest` resolver selects the newest published non-draft official Xray-core release by publication time, including prereleases. The newest release verified for this work was [v26.9.9](https://github.com/XTLS/Xray-core/releases/tag/v26.9.9), a prerelease. Product defaults do not pin that tag. Official [REALITY examples](https://github.com/XTLS/REALITY/blob/main/README.md#vless-xtls-utls-reality-example-for-xray-core) and the [v26.9.9 transport parser](https://github.com/XTLS/Xray-core/blob/v26.9.9/infra/conf/transport_internet.go#L14-L81) support the selected raw transport and Vision flow. The [Xray log reference](https://xtls.github.io/en/config/log.html) documents stdout behavior when access/error paths are empty or omitted.
 
-## I. Configuration Verification
+## Verification completed for this change
 
-### 1.1 Reality Inbound
+- Local unit suite: 977 passed, 16 skipped.
+- Local integration suite: 28 passed, 1 skipped.
+- Fresh Ubuntu Docker lifecycle: five scenarios passed using the actual official v26.9.9 binary, including Xray configuration testing as the xray service user, reinstall refusal, backup/restore, and custom paths. The lifecycle test substitutes a systemctl mock.
+- Restore fault tests exercise archive validation, pre-restore backup failure, active/stopped service handling, and bounded rollback.
+- The SNI diagnostic checks one explicit target host:port/SNI pair across TLS 1.3, HTTP/2 and redirect probes.
 
-- Protocol: `vless`
-- Flow: `xtls-rprx-vision`
-- Transport: `tcp + reality`
-- Decryption:
-  - Default: `none`
-  - Optional: configurable via `XRAY_VLESS_DECRYPTION` when VLESS Encryption is enabled
+These results do not prove that a real systemd manager started the service on a target VPS, that a particular external target remains suitable, or that a real client completed a connection. There was no production deployment in this work; run an actual client-through-VPS test and inspect the effective service/journal on the target host before claiming interoperability.
 
-Status: ✅ Compatible with current v26 stable server behavior.
+## Configuration checks
 
-### 1.2 Vision Inbound (dual topology)
+~~~bash
+sudo xrf check --deep
+sudo /usr/local/bin/xray -test -confdir /usr/local/etc/xray/active -format json
+sudo xrf status
+sudo xrf links
+sudo xrf logs --lines 100
+~~~
 
-- Protocol: `vless`
-- Flow: `xtls-rprx-vision`
-- Transport: `tcp + tls`
-- TLS baseline:
-  - `minVersion: "1.3"`
-  - `alpn: ["h2", "http/1.1"]`
-- Decryption remains fixed to `none`
-
-Status: ✅ Compatible and intentionally strict on TLS baseline.
-
-### 1.3 Client Link Generation
-
-- Reality links include:
-  - `security=reality`
-  - `flow=xtls-rprx-vision`
-  - `pbk`, `sid`, `sni`, `fp`
-  - `encryption=` value from state (default `none`, optional custom)
-- Vision links remain unchanged and do not inherit Reality encryption settings
-
-Status: ✅ Behavior matches topology design and avoids cross-inbound leakage.
-
----
-
-## II. v26 Migration Guidance (Deprecation-Aware)
-
-The following fields are considered migration risks when encountered in user-provided or legacy JSON:
-
-| Legacy Field | Risk | Migration Target |
-|--------------|------|------------------|
-| `allowInsecure` | Deprecated/insecure trust model | Use `pinnedPeerCertSha256` + `verifyPeerCertByName` |
-| `verifyPeerCertInNames` | Deprecated | Use `verifyPeerCertByName` |
-| `serverNameToVerify` | Deprecated | Use `verifyPeerCertByName` |
-
-Notes:
-- These fields are primarily client/outbound TLS concerns.
-- Server-side default topology in this project does not require introducing these legacy options.
-
-### Example Migration
-
-#### Avoid (legacy)
-```json
-{
-  "tlsSettings": {
-    "allowInsecure": true,
-    "verifyPeerCertInNames": ["example.com"]
-  }
-}
-```
-
-#### Prefer (v26-era guidance)
-```json
-{
-  "tlsSettings": {
-    "verifyPeerCertByName": "example.com",
-    "pinnedPeerCertSha256": ["<sha256-base64-or-hex-per-upstream-format>"]
-  }
-}
-```
-
----
-
-## III. Runtime Compatibility Guardrails
-
-### 3.1 Deploy-Time Warning Surface
-
-During `xray -test` success path:
-- output is scanned for known deprecation markers;
-- warnings are emitted as structured logs with actionable hints.
-
-### 3.2 Health Check Compatibility Section
-
-`xrf health` now includes a dedicated **Compatibility** item:
-- no warning: pass state;
-- known deprecated markers detected: warning state (informational, non-blocking).
-
-### 3.3 Version Resolution Stability
-
-`--version latest` now uses:
-- `core::retry` for API fetch and package download;
-- `jq` first, fallback parser second for release tag extraction.
-
-This reduces failures from short-lived API/network instability.
-
----
-
-## IV. Optional VLESS Encryption Scope
-
-VLESS Encryption is now supported as an advanced opt-in capability.
-
-- Default: disabled (`XRAY_VLESS_ENCRYPTION_ENABLED=false`)
-- Scope:
-  - `reality-only`: applies to the single Reality inbound
-  - `vision-reality`: applies only to Reality inbound/link; Vision inbound remains `decryption: none`
-- Failure policy:
-  - If enabled but values cannot be generated or validated, installation fails fast with explicit logs.
-
----
-
-## V. Verification Checklist
-
-- [x] Reality inbound syntax/semantics validated on v26 baseline.
-- [x] Vision inbound syntax/semantics validated on v26 baseline.
-- [x] Client links preserve Vision/Reality role separation.
-- [x] Deprecated field migration notes updated (`allowInsecure`, `verifyPeerCertInNames`, `serverNameToVerify`).
-- [x] Health report includes compatibility warning summary.
-
----
-
-## References
-
-- [Xray-core v26.2.6 Release](https://github.com/XTLS/Xray-core/releases/tag/v26.2.6)
-- [Compare v26.1.23...v26.2.6](https://github.com/XTLS/Xray-core/compare/v26.1.23...v26.2.6)
-- [Xray-examples Repository](https://github.com/XTLS/Xray-examples)
-- [VLESS outbound configuration](https://xtls.github.io/en/config/outbounds/vless.html)
+Use configured paths when `XRF_PREFIX` or `XRF_ETC` differs. The `links` command requires access to private state. Existing managed installations use `xrf upgrade` for binary changes; legacy or unknown configuration formats are not accepted as an automatic migration path.
