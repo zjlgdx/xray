@@ -87,6 +87,10 @@ prefixes whose alphabetical order differs from time order. For health JSON,
 parse stdout with `jq -e` and include multiple compatibility warnings; do not
 mix stderr diagnostics into the report. Deep config validation reuses one syntax
 pass and merged value; public layer validators must remain independently usable.
+Exercise the installed `active` directory symlink as well as ordinary directories.
+Compatibility checks over configuration must inspect JSON fields; reserve text
+warning extraction for actual Xray output so loglevel/tag text cannot trigger
+unrelated diagnostics.
 
 If `make test-unit` fails before running any tests with a `/dev/fd/...` error, your
 environment is missing the file-descriptor filesystem that bats-core expects.

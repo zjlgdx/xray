@@ -296,3 +296,78 @@ JSON
     .health.compatibility.message == $expected
   ' <<< "${report}"
 }
+
+@test "health::check_compatibility - default 443 config ignores unrelated warning text" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-default"
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  cat > "${active_dir}/config.json" <<'JSON'
+{
+  "log":{"loglevel":"warning"},
+  "inbounds":[{"port":443,"streamSettings":{"security":"reality","realitySettings":{"target":"www.cloudflare.com:443"}}}],
+  "outbounds":[{"protocol":"blackhole","tag":"block"}]
+}
+JSON
+  run health::check_compatibility
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "health::check_compatibility - non-443 inbound warns even with error loglevel" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-port"
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  cat > "${active_dir}/config.json" <<'JSON'
+{"log":{"loglevel":"error"},"inbounds":[{"port":8443,"streamSettings":{"security":"reality","realitySettings":{"target":"www.cloudflare.com:443"}}}]}
+JSON
+  run health::check_compatibility
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"non-443 port"* ]]
+}
+
+@test "health::check_compatibility - unrelated strings are not deprecated settings or destinations" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-strings"
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  cat > "${active_dir}/config.json" <<'JSON'
+{"log":{"loglevel":"warning"},"inbounds":[{"tag":"allowInsecure verifyPeerCertInNames serverNameToVerify deprecated apple icloud","port":443,"streamSettings":{"security":"reality","realitySettings":{"target":"notapple.com:443"}}}],"outbounds":[{"tag":"block","protocol":"blackhole"}]}
+JSON
+  run health::check_compatibility
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "health::check_compatibility - detects Apple targets and legacy destinations without log keywords" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-destination" field
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  for field in target dest; do
+    jq -n --arg field "$field" '{log:{loglevel:"error"},inbounds:[{port:443,streamSettings:{security:"reality",realitySettings:{($field):"Gateway.iCloud.COM:443"}}}]}' > "${active_dir}/config.json"
+    run health::check_compatibility
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Apple/iCloud REALITY destinations"* ]]
+    [[ "$output" != *"non-443 port"* ]]
+  done
+}
+
+@test "health::check_compatibility - non-REALITY ports do not warn" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-other-inbound"
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  cat > "${active_dir}/config.json" <<'JSON'
+{"inbounds":[{"port":1080,"protocol":"socks"},{"port":443,"streamSettings":{"security":"reality","realitySettings":{"target":"example.com:443"}}}]}
+JSON
+  run health::check_compatibility
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+}
+
+@test "health::check_compatibility - malformed JSON is not reported as compatible" {
+  local active_dir="${BATS_TEST_TMPDIR}/compat-invalid"
+  mkdir -p "${active_dir}"
+  xray::active() { printf '%s\n' "${active_dir}"; }
+  printf '{invalid\n' > "${active_dir}/config.json"
+  run health::check_compatibility
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"failed to parse configuration for compatibility check"* ]]
+}

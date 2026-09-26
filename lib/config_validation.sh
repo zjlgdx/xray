@@ -14,7 +14,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 config::_json_files() {
   local confdir="${1:?confdir required}"
-  find "${confdir}" -maxdepth 1 -type f -name "*.json" | sort
+  # Follow the active directory symlink, without following links inside it.
+  find -H "${confdir}" -maxdepth 1 -type f -name "*.json" | sort
 }
 
 config::_merge() {
