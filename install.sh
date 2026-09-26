@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # xray-fusion online installer
-# Usage: curl -sL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | bash -s -- [options]
+# Usage: export XRAY_SNI=your-verified-target.example
+#        curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash -s -- [options]
 
 set -euo pipefail
 
@@ -283,7 +284,8 @@ args::show_help() {
 xray-fusion online installer
 
 Usage:
-  XRAY_SNI=example.com curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash -s -- [options]
+  export XRAY_SNI=your-verified-target.example
+  curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash -s -- [options]
 
 Options:
   --version, -v <version>       Xray version (default: newest published release)

@@ -49,6 +49,8 @@ install::credentials() {
     XRAY_UUID="$(uuid::from_string "${UUID_FROM_STRING}" "$(xray::bin)")" || return 1
   elif [[ -n "${UUID:-}" ]]; then
     XRAY_UUID="${UUID}"
+  elif [[ -n "${XRAY_UUID:-}" ]]; then
+    : # Preserve the caller's explicitly supplied UUID.
   else
     XRAY_UUID="$(uuid::generate "$(xray::bin)")" || return 1
   fi

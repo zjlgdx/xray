@@ -10,7 +10,13 @@ setup() {
 #!/usr/bin/env bash
 case "$1" in
   -version) echo 'Xray 26.9.9';;
-  uuid) echo '11111111-2222-4333-8444-555555555555';;
+  uuid)
+    if [[ "${2:-}" == -i ]]; then
+      echo '44444444-4444-4444-8444-444444444444'
+    else
+      echo '11111111-2222-4333-8444-555555555555'
+    fi
+    ;;
   x25519)
     if [[ "$#" -eq 1 ]]; then
       echo 'PrivateKey: privatekey'
@@ -61,6 +67,51 @@ STUB
   chmod +x "${TEST_ROOT}/bin/getent" "${TEST_ROOT}/bin/chown" "${TEST_ROOT}/bin/systemctl" "${TEST_ROOT}/bin/mv"
 }
 teardown() { cleanup_integration_env; }
+
+assert_uuid_everywhere() {
+  local expected="${1}"
+  [ "$(jq -r .xray.uuid "${XRF_VAR}/state.json")" = "${expected}" ]
+  [ "$(jq -r '.inbounds[0].settings.clients[0].id' "${XRF_ETC}/xray/active/05_inbounds.json")" = "${expected}" ]
+  [[ "$output" == *"vless://${expected}@"* ]]
+}
+
+@test "fresh install retains a valid XRAY_UUID from the environment" {
+  export XRAY_UUID=22222222-2222-4222-8222-222222222222
+  run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9
+  [ "$status" -eq 0 ]
+  assert_uuid_everywhere "${XRAY_UUID}"
+}
+
+@test "CLI --uuid overrides XRAY_UUID in state config and URI" {
+  export XRAY_UUID=22222222-2222-4222-8222-222222222222
+  local chosen=33333333-3333-4333-8333-333333333333
+  run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9 --uuid "${chosen}"
+  [ "$status" -eq 0 ]
+  assert_uuid_everywhere "${chosen}"
+}
+
+@test "CLI --uuid-from-string overrides XRAY_UUID in state config and URI" {
+  export XRAY_UUID=22222222-2222-4222-8222-222222222222
+  run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9 --uuid-from-string seed
+  [ "$status" -eq 0 ]
+  assert_uuid_everywhere 44444444-4444-4444-8444-444444444444
+}
+
+@test "invalid XRAY_UUID fails rather than silently generating a new one" {
+  export XRAY_UUID=invalid
+  run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9
+  [ "$status" -ne 0 ]
+  [ ! -f "${XRF_VAR}/state.json" ]
+  [ ! -e "${XRF_PREFIX}/bin/xray" ]
+  [ ! -e "${XRF_ETC}/xray" ]
+}
+
+@test "fresh install generates a UUID when no CLI or environment value exists" {
+  unset XRAY_UUID
+  run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9
+  [ "$status" -eq 0 ]
+  assert_uuid_everywhere 11111111-2222-4333-8444-555555555555
+}
 
 @test "fresh install builds one REALITY config and private committed links" {
   run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9

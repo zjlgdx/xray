@@ -31,6 +31,20 @@ teardown() {
   [[ "${output}" == *"Auto-confirm fresh installation"* ]]
 }
 
+@test "online install help exports required SNI before the sudo pipeline" {
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$(mktemp -d)"
+    trap '\''rm -rf "${TMP_DIR}"'\'' EXIT
+    source_args_module
+    args::show_help
+  ' _ "${PROJECT_ROOT}"
+  [ "${status}" -eq 0 ]
+  [[ "${output}" == *'export XRAY_SNI='* ]]
+  [[ "${output}" == *'curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash'* ]]
+  [[ "${output}" != *'XRAY_SNI=example.com curl'* ]]
+}
+
 @test "install.sh - run_xray_install forwards --yes to xrf install" {
   run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"

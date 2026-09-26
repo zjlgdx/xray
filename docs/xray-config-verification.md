@@ -16,8 +16,8 @@ The shared `latest` resolver selects the newest published non-draft official Xra
 
 ## Verification completed for this change
 
-- Local unit suite: 977 passed, 16 skipped.
-- Local integration suite: 28 passed, 1 skipped.
+- Local unit suite: 978 passed, 16 skipped.
+- Local integration suite: 33 passed, 1 skipped.
 - Fresh Ubuntu Docker lifecycle: five scenarios passed using the actual official v26.9.9 binary, including Xray configuration testing as the xray service user, reinstall refusal, backup/restore, and custom paths. The lifecycle test substitutes a systemctl mock.
 - Restore fault tests exercise archive validation, pre-restore backup failure, active/stopped service handling, and bounded rollback.
 - The SNI diagnostic checks one explicit target host:port/SNI pair across TLS 1.3, HTTP/2 and redirect probes.

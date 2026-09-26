@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dual-topology/TLS inbound, Caddy and certificate synchronization, plugin/template/standalone export commands, automatic firewall and sysctl changes, file-log/logrotate branch, and unsupported online `--keep-config`.
 
 ### Verification
-- Local unit suite: 977 passed, 16 skipped; integration suite: 28 passed, 1 skipped.
+- Local unit suite: 978 passed, 16 skipped; integration suite: 33 passed, 1 skipped.
 - Fresh Ubuntu Docker lifecycle: five scenarios passed with official Xray v26.9.9; systemctl was mocked while the Xray service user ran the real configuration test.
 - These checks do not prove a real systemd service or client-to-VPS connection. GitHub Actions had not run for this change at the time of this entry.
 
