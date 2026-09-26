@@ -336,6 +336,7 @@ else
   run_in_container "jq -e '.name == \"vision-reality\" and .xray.cert_dir == \"/tmp/certs\"' /var/lib/xray-fusion/state.json > /dev/null"
   run_in_container "conf=\$(readlink -f /usr/local/etc/xray/active)/05_inbounds.json; jq -e '.inbounds | length == 2' \"\${conf}\" > /dev/null"
 
+  run_uninstall_command /tmp/scenario4-uninstall-after.log
   log "scenario 5: custom prefix/etc renders dynamic systemd unit paths"
   CURRENT_SCENARIO="scenario 5 custom paths"
   run_in_container "cd /workspace/xray && XRF_PREFIX=/tmp/xrf/prefix XRF_ETC=/tmp/xrf/etc XRF_VAR=/tmp/xrf/var ./bin/xrf install --topology reality-only --version '${SMOKE_XRAY_VERSION}' --yes > /tmp/scenario5.log 2>&1"

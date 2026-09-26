@@ -527,6 +527,43 @@ render_release() {
   printf '%s\n' "${release_dir}"
 }
 
+deploy_restore() {
+  local saved="${1}" was_active="${2}" binary_stamp="${3}"
+  local failed=false
+  # The first switch may have failed before consuming this candidate symlink.
+  # Remove it so cp cannot follow it into the candidate release directory.
+  rm -f "$(xray::active).new" || failed=true
+  if [[ -L "${saved}/active" ]]; then
+    if [[ "${failed}" == false ]]; then
+      cp -a "${saved}/active" "$(xray::active).new" || failed=true
+    fi
+    if [[ "${failed}" == false ]]; then
+      mv -Tf "$(xray::active).new" "$(xray::active)" || failed=true
+    fi
+  else
+    rm -f "$(xray::active)" || failed=true
+  fi
+  if [[ "${was_active}" == true && "${failed}" == false ]]; then
+    systemctl restart xray && systemctl is-active --quiet xray || failed=true
+  fi
+  if [[ -f "${saved}/config.sha256" ]]; then
+    cp -p "${saved}/config.sha256" "$(state::digest)" || failed=true
+  else
+    rm -f "$(state::digest)" || failed=true
+  fi
+  if [[ -f "${saved}/binary.sha256" ]]; then
+    cp -p "${saved}/binary.sha256" "${binary_stamp}" || failed=true
+  else
+    rm -f "${binary_stamp}" || failed=true
+  fi
+  if [[ "${failed}" == true ]]; then
+    core::log error "deployment rollback incomplete; recovery files retained" "$(printf '{"path":"%s"}' "${saved}")"
+    return 1
+  fi
+  rm -rf "${saved}"
+  core::log warn "deployment rolled back" '{}'
+}
+
 deploy_release() {
   local release_dir="${1}"
   core::log debug "deploy_release started" "$(printf '{"release_dir":"%s"}' "${release_dir}")"
@@ -557,7 +594,7 @@ deploy_release() {
     fi
   fi
   local new_digest old_digest="" binary_digest="" old_binary_digest="" old_active=""
-  local binary_stamp was_active=false
+  local binary_stamp was_active=false saved
   binary_stamp="$(state::dir)/binary.sha256"
   new_digest="$(digest_confdir "${release_dir}")" || return 1
   [[ -f "$(state::digest)" ]] && old_digest="$(cat "$(state::digest)")"
@@ -575,30 +612,43 @@ deploy_release() {
     core::log info "configuration and deployed binary unchanged" '{}'
     return 0
   fi
+  io::ensure_dir "$(state::dir)" 0700 || return 1
+  saved="$(mktemp -d "$(state::dir)/deploy.XXXXXX")" || return 1
+  chmod 0700 "${saved}" || return 1
+  if [[ -L "$(xray::active)" ]]; then
+    cp -a "$(xray::active)" "${saved}/active" || return 1
+  fi
+  if [[ -f "$(state::digest)" ]]; then
+    cp -p "$(state::digest)" "${saved}/config.sha256" || return 1
+  fi
+  if [[ -f "${binary_stamp}" ]]; then
+    cp -p "${binary_stamp}" "${saved}/binary.sha256" || return 1
+  fi
   io::ensure_dir "$(xray::confbase)" 0755 || return 1
   io::ensure_dir "$(xray::releases)" 0755 || return 1
   ln -sfn "${release_dir}" "$(xray::active).new" || return 1
-  mv -Tf "$(xray::active).new" "$(xray::active)" || return 1
+  mv -Tf "$(xray::active).new" "$(xray::active)" || {
+    deploy_restore "${saved}" "${was_active}" "${binary_stamp}" || true
+    return 1
+  }
   if [[ "${was_active}" == true ]]; then
     if ! systemctl restart xray || ! systemctl is-active --quiet xray; then
       core::log error "restart failed; restoring previous active configuration" '{}'
-      if [[ -n "${old_active}" ]]; then
-        ln -sfn "${old_active}" "$(xray::active).new" || return 1
-        mv -Tf "$(xray::active).new" "$(xray::active)" || return 1
-        systemctl restart xray && systemctl is-active --quiet xray || {
-          core::log error "service rollback failed; manual recovery required" '{}'
-          return 1
-        }
-      else
-        rm -f "$(xray::active)"
-      fi
+      deploy_restore "${saved}" "${was_active}" "${binary_stamp}" || return 1
       return 1
     fi
   fi
-  printf '%s\n' "${new_digest}" | io::atomic_write "$(state::digest)" 0644 || return 1
-  if [[ "${was_active}" == true ]]; then
-    printf '%s\n' "${binary_digest}" | io::atomic_write "${binary_stamp}" 0644 || return 1
+  if ! printf '%s\n' "${new_digest}" | io::atomic_write "$(state::digest)" 0644; then
+    deploy_restore "${saved}" "${was_active}" "${binary_stamp}" || return 1
+    return 1
   fi
+  if [[ "${was_active}" == true ]]; then
+    if ! printf '%s\n' "${binary_digest}" | io::atomic_write "${binary_stamp}" 0644; then
+      deploy_restore "${saved}" "${was_active}" "${binary_stamp}" || return 1
+      return 1
+    fi
+  fi
+  rm -rf "${saved}"
   plugins::emit deploy_post "active_dir=$(xray::active)"
   core::log info "deployed" "$(printf '{"active":"%s"}' "$(xray::active)")"
 }

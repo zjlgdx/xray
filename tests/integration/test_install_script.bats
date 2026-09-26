@@ -168,7 +168,7 @@ EOF
   setup_wrapper_env
   create_fake_online_project
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
 
@@ -206,7 +206,7 @@ EOF
   create_fake_online_project
   export XRF_FAKE_FAIL_ON_INSTALL="1"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
 
     TMP_DIR="'"${TEST_TMPDIR}"'/downloaded"

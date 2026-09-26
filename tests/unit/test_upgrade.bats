@@ -123,3 +123,34 @@ teardown() { cleanup_test_env; }
   [[ "$output" == *'use xrf upgrade'* ]]
   [ "$(jq -r .xray.uuid "$(state::path)")" = keep-me ]
 }
+
+@test "install rejects a leftover binary when active is missing" {
+  rm -f "$(xray::active)" "$(state::path)"
+  run "${PROJECT_ROOT}/commands/install.sh" --yes
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'use xrf upgrade'* ]]
+  [ "$(xray::installed_version)" = v1.0.0 ]
+}
+
+@test "install rejects retained releases when active is missing" {
+  rm -f "$(xray::active)" "$(state::path)" "$(xray::bin)"
+  run "${PROJECT_ROOT}/commands/install.sh" --yes
+  [ "$status" -ne 0 ]
+  [[ "$output" == *'use xrf upgrade'* ]]
+  [ -d "$(xray::releases)/old" ]
+}
+
+@test "install permits a dry-run after uninstall left only historical state" {
+  rm -rf "$(xray::confbase)" "$(xray::bin)"
+  run "${PROJECT_ROOT}/commands/install.sh" --dry-run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'Installation Preview'* ]]
+  [ "$(jq -r .xray.uuid "$(state::path)")" = keep-me ]
+}
+
+@test "install help stays available with partial installation residue" {
+  rm -f "$(xray::active)"
+  run "${PROJECT_ROOT}/commands/install.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'Usage: xrf install'* ]]
+}

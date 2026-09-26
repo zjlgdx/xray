@@ -12,7 +12,7 @@ teardown() {
 }
 
 @test "uninstall.sh - parse_args accepts non-interactive flags" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     parse_args --force --keep-config --remove-install-dir --debug
     printf "%s|%s|%s|%s" "${FORCE}" "${KEEP_CONFIG}" "${REMOVE_INSTALL_DIR}" "${DEBUG}"
@@ -23,7 +23,7 @@ teardown() {
 }
 
 @test "uninstall.sh - cleanup returns success when TMP_DIR is unset" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     unset TMP_DIR
 
@@ -37,7 +37,7 @@ teardown() {
   local tmp_dir="${TEST_TMPDIR}/uninstall-tmp"
   mkdir -p "${tmp_dir}"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     TMP_DIR="'"${tmp_dir}"'"
 
@@ -49,7 +49,7 @@ teardown() {
 }
 
 @test "uninstall.sh - check_installation fails in non-interactive mode without --force" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     empty_bin="$(mktemp -d)"
     trap '"'"'/bin/rm -rf "${empty_bin}"'"'"' EXIT
@@ -65,7 +65,7 @@ teardown() {
 }
 
 @test "uninstall.sh - check_installation allows missing install when --force is set" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     empty_bin="$(mktemp -d)"
     trap '"'"'/bin/rm -rf "${empty_bin}"'"'"' EXIT
@@ -81,7 +81,7 @@ teardown() {
 }
 
 @test "uninstall.sh - confirm_uninstallation auto-continues in non-interactive mode" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     KEEP_CONFIG="true"
     FORCE=""
@@ -102,10 +102,10 @@ teardown() {
 printf "%s|%s\n" "$PWD" "$*" >> "__CALLS_FILE__"
 exit 0
 EOF
-  sed -i "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/install/bin/xrf"
+  sed -i.bak "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/install/bin/xrf"
   chmod +x "${workdir}/install/bin/xrf"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     INSTALL_DIR="'"${workdir}"'/install"
     TMP_DIR="'"${workdir}"'/tmp"
@@ -127,10 +127,10 @@ EOF
 printf "%s|%s\n" "$PWD" "$*" >> "__CALLS_FILE__"
 exit 0
 EOF
-  sed -i "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/tmp/xray-fusion/bin/xrf"
+  sed -i.bak "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/tmp/xray-fusion/bin/xrf"
   chmod +x "${workdir}/tmp/xray-fusion/bin/xrf"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     INSTALL_DIR="'"${workdir}"'/missing-install"
     TMP_DIR="'"${workdir}"'/tmp"
@@ -146,7 +146,7 @@ EOF
   local install_dir="${TEST_TMPDIR}/remove-install-dir"
   mkdir -p "${install_dir}"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     INSTALL_DIR="'"${install_dir}"'"
     REMOVE_INSTALL_DIR="true"
@@ -162,7 +162,7 @@ EOF
   local install_dir="${TEST_TMPDIR}/keep-install-dir"
   mkdir -p "${install_dir}"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/uninstall.sh"
     INSTALL_DIR="'"${install_dir}"'"
     REMOVE_INSTALL_DIR=""

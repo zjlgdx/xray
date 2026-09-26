@@ -12,7 +12,7 @@ teardown() {
 }
 
 @test "install.sh - parse_args accepts --yes" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     TMP_DIR="$(mktemp -d)"
     trap '"'"'rm -rf "${TMP_DIR}"'"'"' EXIT
@@ -32,7 +32,7 @@ teardown() {
 }
 
 @test "install.sh - run_xray_install forwards --yes to xrf install" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     workdir="$(mktemp -d)"
     trap '"'"'rm -rf "${workdir}"'"'"' EXIT
@@ -46,7 +46,7 @@ teardown() {
 printf "%s\n" "$*" >> "__CALLS_FILE__"
 exit 0
 EOF
-    sed -i "s|__CALLS_FILE__|${workdir}/calls.log|" "${INSTALL_DIR}/bin/xrf"
+    sed -i.bak "s|__CALLS_FILE__|${workdir}/calls.log|" "${INSTALL_DIR}/bin/xrf"
     chmod +x "${INSTALL_DIR}/bin/xrf"
 
     TOPOLOGY="reality-only"
@@ -67,7 +67,7 @@ EOF
 }
 
 @test "install.sh - setup_environment exports domain debug and signed tag requirements" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     TMP_DIR="$(mktemp -d)"
     trap '"'"'rm -rf "${TMP_DIR}"'"'"' EXIT
@@ -86,7 +86,7 @@ EOF
 }
 
 @test "install.sh - cleanup_partial_installation removes fresh install artifacts" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     workdir="$(mktemp -d)"
     trap '"'"'rm -rf "${workdir}"'"'"' EXIT
@@ -114,7 +114,7 @@ EOF
 }
 
 @test "install.sh - cleanup_partial_installation preserves preexisting install directory" {
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
     workdir="$(mktemp -d)"
     trap '"'"'rm -rf "${workdir}"'"'"' EXIT
@@ -151,12 +151,12 @@ EOF
 printf "%s\n" "$*" >> "__CALLS_FILE__"
 exit 0
 EOF
-  sed -i "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/install/bin/xrf"
+  sed -i.bak "s|__CALLS_FILE__|${workdir}/calls.log|" "${workdir}/install/bin/xrf"
   chmod +x "${workdir}/install/bin/xrf"
   ln -s "${workdir}/install/bin/xrf" "${workdir}/bin/xrf"
   : > "${workdir}/install/.install_in_progress"
 
-  run bash -lc '
+  run bash -c '
     source "'"${PROJECT_ROOT}"'/install.sh"
 
     INSTALL_DIR="'"${workdir}"'/install"
@@ -179,4 +179,51 @@ EOF
   [ ! -e "${workdir}/install" ]
   [ ! -L "${workdir}/bin/xrf" ]
   [ ! -f "${workdir}/calls.log" ]
+}
+
+@test "install.sh - cleanup removes own symlink through an aliased install parent" {
+  local workdir="${TEST_TMPDIR}/aliased-install"
+  mkdir -p "${workdir}/real/install/bin" "${workdir}/bin"
+  ln -s "${workdir}/real" "${workdir}/alias"
+  touch "${workdir}/real/install/bin/xrf" "${workdir}/real/install/.install_in_progress"
+  ln -s "${workdir}/alias/install/bin/xrf" "${workdir}/bin/xrf"
+
+  run bash -c '
+    source "$1/install.sh"
+    INSTALL_DIR="$2/alias/install"
+    SYMLINK_PATH="$2/bin/xrf"
+    INSTALL_MARKER="${INSTALL_DIR}/.install_in_progress"
+    INSTALL_DIR_PREEXISTING=false
+    cleanup_partial_installation
+  ' _ "${PROJECT_ROOT}" "${workdir}"
+
+  [ "${status}" -eq 0 ]
+  [ ! -L "${workdir}/bin/xrf" ]
+  [ ! -d "${workdir}/real/install" ]
+  [ -L "${workdir}/alias" ]
+}
+
+@test "install.sh - cleanup preserves unrelated symlink and existing credentials" {
+  local workdir="${TEST_TMPDIR}/unrelated-link"
+  mkdir -p "${workdir}/install/bin" "${workdir}/other/bin" "${workdir}/bin"
+  touch "${workdir}/install/bin/xrf" "${workdir}/other/bin/xrf"
+  printf '%s' 'existing-credential' > "${workdir}/install/credentials"
+  touch "${workdir}/install/.install_in_progress"
+  ln -s "${workdir}/other/bin/xrf" "${workdir}/bin/xrf"
+
+  run bash -c '
+    source "$1/install.sh"
+    INSTALL_DIR="$2/install"
+    SYMLINK_PATH="$2/bin/xrf"
+    INSTALL_MARKER="${INSTALL_DIR}/.install_in_progress"
+    INSTALL_DIR_PREEXISTING=true
+    cleanup_partial_installation
+  ' _ "${PROJECT_ROOT}" "${workdir}"
+
+  [ "${status}" -eq 0 ]
+  [ "$(readlink "${workdir}/bin/xrf")" = "${workdir}/other/bin/xrf" ]
+  [ -f "${workdir}/other/bin/xrf" ]
+  [ -f "${workdir}/install/bin/xrf" ]
+  [ "$(cat "${workdir}/install/credentials")" = 'existing-credential' ]
+  [ ! -e "${workdir}/install/.install_in_progress" ]
 }

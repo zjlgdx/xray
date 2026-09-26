@@ -935,7 +935,9 @@ cleanup_partial_installation() {
   if [[ -L "${SYMLINK_PATH}" ]]; then
     local target
     target="$(readlink -f "${SYMLINK_PATH}" 2> /dev/null || true)"
-    if [[ "${target}" == "${INSTALL_DIR}/bin/xrf" ]]; then
+    local expected_target
+    expected_target="$(readlink -f "${INSTALL_DIR}/bin/xrf" 2> /dev/null || true)"
+    if [[ -n "${expected_target}" && "${target}" == "${expected_target}" ]]; then
       rm -f "${SYMLINK_PATH}"
       log_debug "Removed symlink: ${SYMLINK_PATH}"
     fi
