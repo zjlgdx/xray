@@ -14,11 +14,11 @@ sudo XRAY_SNI=your-target.example xrf install --yes
 
 The probe checks the same target host, port and SNI that you intend to configure for TLS 1.3, HTTP/2 and redirects. It is diagnostic, not an installation gate. Use `XRAY_REALITY_DEST=host:port` if the destination differs from `<XRAY_SNI>:443`. The target should be chosen and checked for your environment; the installer has no universal default.
 
-If installation reports existing managed artifacts, use `sudo xrf upgrade --version latest` for a binary update. Do not rerun fresh install over a live configuration. If an earlier install failed, inspect the reported paths and service state before cleanup.
+If installation reports existing managed artifacts, use `sudo xrf upgrade --version latest` for a binary update. For management-script updates, use the [tool updater](README.md#xray-fusion-tools). Do not rerun fresh install over a live configuration. If an earlier install failed, inspect the reported paths and service state before cleanup.
 
 ## Version resolution or download fails
 
-The default `latest` means the newest published, non-draft official Xray-core release by publication time, including prereleases. During this change, the verified newest release was v26.9.9. The tool does not fall back to an older stable version when the release API is unavailable or the newest metadata is invalid.
+The default `latest` means the newest published, non-draft official Xray-core release by publication time, including prereleases. The tool does not fall back to an older stable version when the release API is unavailable or the newest metadata is invalid.
 
 Check network access to the official GitHub release API and assets, then retry. For an intentionally pinned release use `--version vX.Y.Z`. Install, upgrade and smoke validation share the version policy. Neither path supports migration of retired configuration layouts.
 
