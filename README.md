@@ -1,49 +1,104 @@
 # Xray-Fusion
 
-One-command VLESS + REALITY + Vision deployment with private client credentials.
+Deploy a VLESS + REALITY server with Vision, then manage it with `xrf`.
 
 [![Tests](https://github.com/zjlgdx/xray/actions/workflows/test.yml/badge.svg)](https://github.com/zjlgdx/xray/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Quick Start
+## Before you start
 
-Choose a REALITY target that you have verified, for example with
-`./bin/xrf test-sni <sni> --target <host:port>` from a source checkout. Set its SNI
-explicitly; `XRAY_REALITY_DEST` defaults to `<XRAY_SNI>:443`. The diagnostic checks
-the actual target host and port with that SNI for TLS 1.3, HTTP/2, and redirects.
-It is advisory: installation validates local inputs and Xray configuration, not
-live reachability of an external site.
+Run the commands below **on your Linux VPS**, using an account with `sudo` access
+(or omit `sudo` if logged in as root).
+
+- **Server:** Ubuntu/Debian or CentOS/RHEL, with systemd and x86-64 or ARM64.
+- **Tools:** `curl` and `git` must be available before running the installer.
+- **Network:** allow inbound **TCP 443** in your VPS firewall and provider's
+  security rules. Make sure another service is not already using that port.
+  The installer does not change firewall rules.
+- **REALITY target:** choose a reachable HTTPS hostname for camouflage. You do
+  not need to own the domain or obtain a certificate. There is no default target;
+  see [target selection and diagnostics](docs/advanced.md#fresh-installation).
+
+## Install and connect
+
+### 1. Install the server
+
+Replace `your-verified-target.example` with your chosen REALITY hostname. This is
+an example placeholder, not a working target.
 
 ```bash
 export XRAY_SNI=your-verified-target.example
-curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh | sudo -E bash -s -- --yes
-sudo xrf links
-sudo xrf status
+curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh |
+  sudo -E bash -s -- --yes
 ```
 
-A fresh install uses the newest published non-draft Xray release, including
-prereleases. The newest verified for this change was v26.9.9; the default is
-not pinned to that tag. Existing installations use
-`sudo xrf upgrade --version latest`. Legacy or unknown configuration layouts
-are not automatically migrated.
+The installer creates a new server configuration on port 443. It selects the
+newest published Xray release, **including prereleases**. To choose a specific
+release, append `--version vX.Y.Z`, replacing the placeholder with a release tag.
 
-The installed tool contains runtime scripts, the systemd unit, the standalone
-uninstaller, and the license. Development tests and documentation remain in the
-repository. Installer help is available without creating temporary files.
+Already installed? Use [Update](#update) below; a fresh install will not overwrite
+an existing installation.
 
-## Commands
+### 2. Check the server
 
-| Command | Description |
-|---------|-------------|
-| `xrf status` | Installed Xray version and active configuration path |
-| `xrf links` | Connection links |
-| `xrf logs` | View logs |
-| `xrf health` | Health check |
-| `xrf upgrade --version vX.Y.Z` | Upgrade the core while preserving configuration |
-| `install.sh --update-tool` | Update the installed tool layer in place (Xray untouched) |
-| `xrf backup` | Create, verify, list, and restore current managed-layout backups |
-| `xrf test-sni` | Diagnose an explicit REALITY target |
-| `xrf uninstall` | Remove installation |
+```bash
+sudo xrf health
+```
+
+Resolve any reported failures before connecting. See [Troubleshooting](TROUBLESHOOTING.md)
+if installation or health checks fail.
+
+### 3. Connect your client
+
+```bash
+sudo xrf links
+```
+
+Copy the generated `vless://` link into a client that supports **VLESS + REALITY +
+Vision**, then enable the connection and open a website. Keep the link private:
+it contains your connection credentials.
+
+A passing server health check does not prove that your client can connect. Test
+from the device and network you intend to use.
+
+## Everyday commands
+
+| Task | Command |
+| --- | --- |
+| Show installed version | `sudo xrf status` |
+| Show client connection link | `sudo xrf links` |
+| Check server health | `sudo xrf health` |
+| Validate configuration | `sudo xrf check --deep` |
+| Follow logs | `sudo xrf logs --follow` |
+| Create a configuration backup | `sudo xrf backup create` |
+
+For restore instructions and other options, see [backup and restore](docs/advanced.md#backup-and-restore).
+Backups contain credentials; keep them private too.
+
+## Update
+
+### Xray core
+
+```bash
+sudo xrf upgrade --version latest
+sudo xrf health
+```
+
+This preserves configuration and credentials, but **restarts Xray and interrupts
+active connections**. `latest` includes prereleases; use `--version vX.Y.Z` to
+select a specific release. Reconnect and test your actual client afterward.
+
+### Xray-Fusion tools
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh |
+  sudo bash -s -- --update-tool
+```
+
+This updates the management scripts without changing the Xray core, configuration,
+service or credentials. It does not require `XRAY_SNI`. The updater prints a
+backup path and restores the previous tools if the update or status check fails.
+Keep the backup until you have confirmed the updated tools work.
 
 ## Uninstall
 
@@ -51,76 +106,15 @@ repository. Installer help is available without creating temporary files.
 sudo xrf uninstall
 ```
 
-## Requirements
+This stops Xray and removes its core, configuration and service. Management tools,
+state and historical backups remain; see [removal details](TROUBLESHOOTING.md#online-wrapper-or-uninstall-fails).
 
-- Linux (Ubuntu/Debian/CentOS)
-- systemd
-- 64-bit architecture
-- Git for the online installer
+## More help
 
-## Documentation
-
-| Document | Description |
-|----------|-------------|
-| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Common issues and solutions |
-| [docs/advanced.md](docs/advanced.md) | Advanced configuration |
-| [docs/development-environments.md](docs/development-environments.md) | Host shell and optional thin-devbox-shell workflow |
-| [docs/agent-session-template.md](docs/agent-session-template.md) | Portable Codex / agent startup template |
-| [docs/adr/](docs/adr/) | Architecture decisions |
+- [Troubleshooting](TROUBLESHOOTING.md) — installation and connection problems.
+- [Advanced configuration](docs/advanced.md) — targets, versions, backups and paths.
+- [Contributing](CONTRIBUTING.md) — development setup and tests.
 
 ## License
 
-MIT
-
-## Upgrading an existing server
-
-Use `sudo xrf upgrade --version vX.Y.Z` for an explicit release. `--version latest`
-selects the newest published, non-draft GitHub release by publication time,
-including prereleases. The same rule applies to a fresh install and the lifecycle
-smoke test when no version is specified. There is no automatic upgrade.
-
-The command holds the configuration lock, backs up the binary, active configuration
-and state under `/var/lib/xray-fusion/upgrades/`, downloads and verifies the candidate,
-and validates the existing configuration before replacing the executable atomically.
-It restarts Xray (disconnecting existing connections), verifies the running executable
-hash, then updates the recorded version. Restart, process verification or metadata
-commit failure restores the previous binary and metadata and restarts the old core.
-Backups contain credentials and are stored in directories accessible only to their owner.
-An interrupted machine or rollback failure may still require manual recovery from the
-reported backup; backups are retained until the operator removes them.
-
-`xrf install` refuses existing managed artifacts. It is a fresh-install command,
-not a way to upgrade or regenerate a live server's credentials. For configuration-only
-changes, the renderer validates before switching the active directory and restores the
-previous active directory if restart fails. A core change is not skipped merely because
-the configuration hash is unchanged.
-
-Process/configuration checks do **not** prove REALITY client compatibility. After an
-upgrade, test the actual client through the VPS, including the expected target sites.
-Do not substitute a request through a different proxy or a direct VPS curl for that test.
-
-### Updating the tool layer
-
-`xrf upgrade` replaces the Xray core only. To bring the installed runtime scripts
-(`bin`, `commands`, `lib`, `modules`, `services`, `packaging`) to the current
-source ref, rerun the online installer with `--update-tool`:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh |
-  sudo -E bash -s -- --update-tool
-```
-
-It verifies the checkout like a fresh install, backs up the tool directory to
-`<install-dir>.bak-<UTC>`, replaces the managed payload directories, refreshes the
-`/usr/local/bin/xrf` symlink, and runs `xrf status` as a smoke test. On failure it
-restores the backup automatically. The Xray binary, configuration, service and
-`state.json` are not touched and `XRAY_SNI` is not required. Without `--update-tool`
-the installer still refuses an existing tool directory.
-
-### Logging during configuration changes
-
-Xray access and error output goes to stdout/stderr and is collected by systemd's
-journal. Use `sudo xrf logs` or `journalctl -u xray.service`. Journald owns
-retention and rotation; this tool does not create file logs or logrotate jobs.
-Configure `XRAY_LOG_LEVEL` for a bounded diagnostic session, then return it to
-the normal level.
+[MIT](LICENSE)

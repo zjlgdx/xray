@@ -18,11 +18,11 @@ Supported install options include `--version latest|vX.Y.Z`, `--uuid`, `--uuid-f
 
 ## Xray version
 
-The default `latest` resolves the newest published, non-draft release by publication time from the official Xray-core releases API, including prereleases. The latest release verified during this change was v26.9.9; it is not a version pinned into the product. API failure or invalid newest release metadata fails closed rather than selecting an older stable release. The same resolver serves install, upgrade, and the lifecycle smoke test.
+The default `latest` resolves the newest published, non-draft release by publication time from the official Xray-core releases API, including prereleases. API failure or invalid newest release metadata fails closed rather than selecting an older stable release. The same resolver serves install, upgrade, and the lifecycle smoke test.
 
 ~~~bash
 sudo xrf upgrade --version latest
-sudo xrf upgrade --version v26.9.9
+sudo xrf upgrade --version vX.Y.Z
 ~~~
 
 Upgrade replaces the Xray binary while retaining the managed configuration and client credentials. It validates the candidate and the existing configuration, restarts the service, checks the running executable, and restores the prior binary and metadata on a bounded failure path. A restart interrupts existing connections. This is not a legacy topology migration interface.
