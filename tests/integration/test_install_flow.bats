@@ -37,7 +37,7 @@ XRAY
   export XRAY_URL="file://${TEST_ROOT}/xray.zip"
   XRAY_SHA256="$(sha256sum "${TEST_ROOT}/xray.zip" | awk '{print $1}')"
   export XRAY_SHA256
-  export XRAY_PRIVATE_KEY=privatekey XRAY_SHORT_ID=abcd1234 XRAY_SERVER_IP=203.0.113.10 XRAY_SNI=www.microsoft.com
+  export XRAY_PRIVATE_KEY=privatekey XRAY_SHORT_ID=abcd1234 XRAY_SERVER_IP=203.0.113.10 XRAY_SNI=www.bing.com
   # The fake group database and chown avoid changing host identities.
   cat > "${TEST_ROOT}/bin/getent" <<'STUB'
 #!/usr/bin/env bash
@@ -120,7 +120,7 @@ assert_uuid_everywhere() {
   [ -f "${XRF_VAR}/state.json" ]
   [ "$(stat -c '%a' "${XRF_VAR}" 2>/dev/null || stat -f '%Lp' "${XRF_VAR}")" = 700 ]
   [ "$(stat -c '%a' "${XRF_VAR}/state.json" 2>/dev/null || stat -f '%Lp' "${XRF_VAR}/state.json")" = 600 ]
-  jq -e '.inbounds | length == 1 and .[0].streamSettings.network == "raw" and .[0].streamSettings.realitySettings.target == "www.microsoft.com:443"' "${XRF_ETC}/xray/active/05_inbounds.json"
+  jq -e '.inbounds | length == 1 and .[0].streamSettings.network == "raw" and .[0].streamSettings.realitySettings.target == "www.bing.com:443"' "${XRF_ETC}/xray/active/05_inbounds.json"
   [[ "$output" == *'vless://11111111-2222-4333-8444-555555555555@203.0.113.10'* ]]
   grep -q '^enable --now xray$' "${XRF_VAR}/systemctl.log"
 }
@@ -157,16 +157,16 @@ assert_uuid_everywhere() {
 }
 
 @test "SNI whitespace is normalized identically in config state and URI" {
-  export XRAY_SNI=' www.microsoft.com, alt.example.com'
+  export XRAY_SNI=' www.bing.com, alt.example.com'
   run "${PROJECT_ROOT}/commands/install.sh" --yes --version v26.9.9
   if [ "$status" -ne 0 ]; then printf '%s\n' "$output" >&3; fi
   [ "$status" -eq 0 ]
-  [ "$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames | join(",")' "${XRF_ETC}/xray/active/05_inbounds.json")" = 'www.microsoft.com,alt.example.com' ]
-  [ "$(jq -r .xray.reality_sni "${XRF_VAR}/state.json")" = 'www.microsoft.com,alt.example.com' ]
-  [[ "$output" == *'SNI: www.microsoft.com,alt.example.com'* ]]
-  [[ "$output" == *'Target: www.microsoft.com:443'* ]]
-  [[ "$output" == *'sni=www.microsoft.com&'* ]]
-  [[ "$output" != *'sni= www.microsoft.com'* ]]
+  [ "$(jq -r '.inbounds[0].streamSettings.realitySettings.serverNames | join(",")' "${XRF_ETC}/xray/active/05_inbounds.json")" = 'www.bing.com,alt.example.com' ]
+  [ "$(jq -r .xray.reality_sni "${XRF_VAR}/state.json")" = 'www.bing.com,alt.example.com' ]
+  [[ "$output" == *'SNI: www.bing.com,alt.example.com'* ]]
+  [[ "$output" == *'Target: www.bing.com:443'* ]]
+  [[ "$output" == *'sni=www.bing.com&'* ]]
+  [[ "$output" != *'sni= www.bing.com'* ]]
 }
 
 @test "existing artifacts reject without overwriting" {

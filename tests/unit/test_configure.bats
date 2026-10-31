@@ -6,7 +6,7 @@ setup() {
   setup_test_env
   source "${PROJECT_ROOT}/services/xray/configure.sh"
   export XRAY_PORT=443 XRAY_UUID=11111111-2222-4333-8444-555555555555
-  export XRAY_SNI=www.microsoft.com XRAY_REALITY_DEST=www.microsoft.com:443
+  export XRAY_SNI=www.bing.com XRAY_REALITY_DEST=www.bing.com:443
   export XRAY_SHORT_ID=abcd1234 XRAY_PRIVATE_KEY=privatekey
   mkdir -p "${TEST_TMPDIR}/release"
 }
@@ -14,8 +14,20 @@ teardown() { cleanup_test_env; }
 
 @test "renderer writes one RAW REALITY Vision-flow inbound" {
   xray::render_reality_inbound "${TEST_TMPDIR}/release" false 0.0.0.0
-  run jq -e '.inbounds | length == 1 and .[0].settings.decryption == "none" and .[0].settings.clients[0].flow == "xtls-rprx-vision" and .[0].streamSettings.network == "raw" and .[0].streamSettings.realitySettings.target == "www.microsoft.com:443" and .[0].streamSettings.realitySettings.shortIds == ["abcd1234"] and (.[0].streamSettings.realitySettings | has("dest") | not)' "${TEST_TMPDIR}/release/05_inbounds.json"
+  run jq -e '.inbounds | length == 1 and .[0].settings.decryption == "none" and .[0].settings.clients[0].flow == "xtls-rprx-vision" and .[0].streamSettings.network == "raw" and .[0].streamSettings.realitySettings.target == "www.bing.com:443" and .[0].streamSettings.realitySettings.shortIds == ["abcd1234"] and (.[0].streamSettings.realitySettings | has("dest") | not)' "${TEST_TMPDIR}/release/05_inbounds.json"
   [ "$status" -eq 0 ]
+}
+
+@test "renderer warns for high-risk REALITY destinations only" {
+  export XRAY_REALITY_DEST=www.microsoft.com:443
+  run xray::render_reality_inbound "${TEST_TMPDIR}/release" false 0.0.0.0
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"high-risk set"* ]]
+
+  export XRAY_REALITY_DEST=www.bing.com:443
+  run xray::render_reality_inbound "${TEST_TMPDIR}/release" false 0.0.0.0
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"high-risk set"* ]]
 }
 
 @test "renderer refuses missing SNI without a default target" {
@@ -38,7 +50,7 @@ teardown() { cleanup_test_env; }
   export XRAY_REALITY_DEST='bad"host:443'
   run xray::render_reality_inbound "${TEST_TMPDIR}/release" false 0.0.0.0
   [ "$status" -ne 0 ]
-  export XRAY_REALITY_DEST=www.microsoft.com:99999
+  export XRAY_REALITY_DEST=www.bing.com:99999
   run xray::render_reality_inbound "${TEST_TMPDIR}/release" false 0.0.0.0
   [ "$status" -ne 0 ]
 }
