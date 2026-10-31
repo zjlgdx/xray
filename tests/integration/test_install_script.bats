@@ -397,7 +397,7 @@ EOF
   run bash -c '
     source "$1/install.sh"
     TMP_DIR="$2/download"
-    INSTALL_DIR="$2/tool"
+    INSTALL_DIR="$2/tool///"
     SYMLINK_PATH="$2/xrf"
     date() { printf "20261031T000000Z\n"; }
     update_tool_layer

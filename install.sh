@@ -593,6 +593,9 @@ restore_tool_backup() {
 # Update the tool layer of an existing installation.
 # Leaves the Xray binary, configuration, service and state untouched.
 update_tool_layer() {
+  while [[ "${INSTALL_DIR}" != / && "${INSTALL_DIR}" == */ ]]; do
+    INSTALL_DIR="${INSTALL_DIR%/}"
+  done
   log_info "Updating xray-fusion tool layer at ${INSTALL_DIR}..."
 
   if [[ -L "${INSTALL_DIR}" || ! -d "${INSTALL_DIR}" || ! -f "${INSTALL_DIR}/bin/xrf" ]]; then
