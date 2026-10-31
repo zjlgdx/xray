@@ -13,11 +13,11 @@ teardown() { cleanup_test_env; }
 
 @test "fresh renderer emits one RAW REALITY Vision-flow inbound" {
   export XRAY_PORT=443 XRAY_UUID=11111111-1111-4111-8111-111111111111
-  export XRAY_SNI=www.microsoft.com XRAY_REALITY_DEST=www.microsoft.com:443
+  export XRAY_SNI=www.bing.com XRAY_REALITY_DEST=www.bing.com:443
   export XRAY_SHORT_ID=abcd1234 XRAY_PRIVATE_KEY=privatekey
   xray::render_reality_inbound "${TEST_TMPDIR}/release" false 0.0.0.0
 
-  run jq -e '.inbounds | length == 1 and .[0].protocol == "vless" and .[0].settings.decryption == "none" and .[0].settings.clients[0].flow == "xtls-rprx-vision" and .[0].streamSettings.network == "raw" and .[0].streamSettings.security == "reality" and .[0].streamSettings.realitySettings.target == "www.microsoft.com:443" and .[0].streamSettings.realitySettings.serverNames == ["www.microsoft.com"] and .[0].streamSettings.realitySettings.shortIds == ["abcd1234"] and (.[0].streamSettings.realitySettings | has("dest") | not)' "${TEST_TMPDIR}/release/05_inbounds.json"
+  run jq -e '.inbounds | length == 1 and .[0].protocol == "vless" and .[0].settings.decryption == "none" and .[0].settings.clients[0].flow == "xtls-rprx-vision" and .[0].streamSettings.network == "raw" and .[0].streamSettings.security == "reality" and .[0].streamSettings.realitySettings.target == "www.bing.com:443" and .[0].streamSettings.realitySettings.serverNames == ["www.bing.com"] and .[0].streamSettings.realitySettings.shortIds == ["abcd1234"] and (.[0].streamSettings.realitySettings | has("dest") | not)' "${TEST_TMPDIR}/release/05_inbounds.json"
   [ "$status" -eq 0 ]
 }
 

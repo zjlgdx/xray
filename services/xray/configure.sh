@@ -101,13 +101,11 @@ ensure_reality_dest() {
     return "${ERR_INVALID_ARG}"
   fi
 
-  # Warn about Apple/iCloud REALITY destinations (v26.3.27+: risk of IP blocking)
-  case "${host,,}" in
-    *icloud-content.com | *cdn-apple.com | *mzstatic.com | *icloud.com | *apple.com)
-      core::log warn "Apple/iCloud REALITY dest may cause IP blocking (Xray v26.3.27+)" \
-        "$(printf '{"host":"%s","suggestion":"Choose a separately verified REALITY target"}' "${host}")"
-      ;;
-  esac
+  # Warn about REALITY destinations in Xray's high-risk set (v26.3.27+)
+  if xray::is_risky_reality_host "${host}"; then
+    core::log warn "REALITY dest is in Xray high-risk set (Apple/iCloud/Microsoft, .cn/.ru/.ir); IP blocking risk increases" \
+      "$(printf '{"host":"%s","suggestion":"Choose a separately verified REALITY target"}' "${host}")"
+  fi
 
   printf '%s:%s' "${host}" "${port}"
 }

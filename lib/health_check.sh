@@ -223,9 +223,9 @@ health::check_compatibility() {
       else empty end),
       (if any($reality[];
         (.streamSettings.realitySettings.target // .streamSettings.realitySettings.dest // "") |
-        tostring | ascii_downcase | test("(^|\\.)(apple|icloud|cdn-apple|icloud-content|mzstatic)\\.com(:[0-9]+)?$")
+        tostring | ascii_downcase | test("(^|\\.)(apple|icloud|cdn-apple|icloud-content|mzstatic|microsoft)\\.com(:[0-9]+)?$|\\.(cn|ru|ir)(:[0-9]+)?$")
       ) then
-        "Apple/iCloud REALITY destinations may cause IP blocking; choose a different target"
+        "REALITY destination is in Xray high-risk set (Apple/iCloud/Microsoft, .cn/.ru/.ir); IP blocking risk increases"
       else empty end)
     ] | .[]
   ' "${config_dir}"/*.json)"; then

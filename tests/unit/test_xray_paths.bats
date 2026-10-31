@@ -353,7 +353,7 @@ EOF
   run xray::extract_compat_warnings "WARNING: Apple/iCloud destination may block your IP"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Apple/iCloud REALITY destinations"* ]]
+  [[ "$output" == *"REALITY destinations in Xray high-risk set"* ]]
   [[ "$output" == *"choose a different target"* ]]
 }
 
@@ -361,7 +361,30 @@ EOF
   run xray::extract_compat_warnings "icloud.com dest risk of IP blocking detected"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Apple/iCloud REALITY destinations"* ]]
+  [[ "$output" == *"REALITY destinations in Xray high-risk set"* ]]
+}
+
+@test "xray::extract_compat_warnings - detects Microsoft destination warning" {
+  run xray::extract_compat_warnings 'REALITY: Choosing "www.microsoft.com" as the target will increase the likelihood of your server IP being blocked by the GFW'
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Apple/iCloud/Microsoft"* ]]
+}
+
+@test "xray::is_risky_reality_host - flags Apple/iCloud/Microsoft and ccTLD hosts" {
+  local host
+  for host in www.apple.com apple.com cdn-apple.com www.icloud.com icloud-content.com mzstatic.com www.microsoft.com bing.microsoft.com example.cn mirror.ru sample.ir WWW.BING.MICROSOFT.COM:443; do
+    run xray::is_risky_reality_host "${host}"
+    [ "$status" -eq 0 ]
+  done
+}
+
+@test "xray::is_risky_reality_host - accepts safe targets and lookalikes" {
+  local host
+  for host in www.bing.com www.cloudflare.com notapple.com apple.com.example.com notmicrosoft.com microsoft.example.org bing.example.com ""; do
+    run xray::is_risky_reality_host "${host}"
+    [ "$status" -eq 1 ]
+  done
 }
 
 @test "xray::extract_compat_warnings - no false positive for unrelated apple text" {

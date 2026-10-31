@@ -83,6 +83,42 @@ xray::installed_version() {
 }
 
 ##
+# Check whether a REALITY target/SNI host is in Xray's high-risk set.
+#
+# Mirrors the warning emitted by Xray-core (infra/conf/transport_security.go):
+# Apple/iCloud/Microsoft domains and .cn/.ru/.ir domains increase the chance
+# of the server IP being blocked by the GFW. Unlike Xray's own substring test,
+# the domain family check uses label boundaries so lookalikes such as
+# "notapple.com" or "apple.com.example.com" are not flagged.
+#
+# Arguments:
+#   $1 - host or host:port (string, required)
+#
+# Returns:
+#   0 - host is in the high-risk set
+#   1 - host is acceptable or empty
+##
+xray::is_risky_reality_host() {
+  local host="${1,,}"
+  # Strip a trailing ":port" from hostname/IPv4 forms; keep bare IPv6 literals.
+  if [[ "${host}" == *:*:* ]]; then
+    :
+  elif [[ "${host}" == *:* ]]; then
+    host="${host%:*}"
+  fi
+  host="${host%.}"
+  [[ -z "${host}" ]] && return 1
+
+  case "${host}" in
+    apple.com | *.apple.com | icloud.com | *.icloud.com | microsoft.com | *.microsoft.com) return 0 ;;
+    cdn-apple.com | *.cdn-apple.com | icloud-content.com | *.icloud-content.com | mzstatic.com | *.mzstatic.com) return 0 ;;
+    *.cn | *.ru | *.ir) return 0 ;;
+  esac
+
+  return 1
+}
+
+##
 # Extract compatibility warnings from Xray output or config text.
 #
 # Arguments:
@@ -116,10 +152,10 @@ xray::extract_compat_warnings() {
     printf '%s\n' 'Xray warns: REALITY on non-443 port may reduce stealth; port 443 is recommended'
   fi
 
-  # v26.3.27+: Apple/iCloud destination warning
-  if [[ "${lower}" == *"apple"* || "${lower}" == *"icloud"* ]] \
+  # v26.3.27+: high-risk REALITY destination warning (Apple/iCloud/Microsoft, .cn/.ru/.ir)
+  if [[ "${lower}" == *"apple"* || "${lower}" == *"icloud"* || "${lower}" == *"microsoft"* ]] \
     && [[ "${lower}" == *"block"* || "${lower}" == *"warn"* || "${lower}" == *"risk"* ]]; then
-    printf '%s\n' 'Xray warns: Apple/iCloud REALITY destinations may cause IP blocking; choose a different target'
+    printf '%s\n' 'Xray warns: REALITY destinations in Xray high-risk set (Apple/iCloud/Microsoft, .cn/.ru/.ir) may cause IP blocking; choose a different target'
   fi
 }
 
