@@ -305,6 +305,15 @@ run_in_container "test -x /usr/local/bin/xray"
 run_in_container "test -L /usr/local/etc/xray/active"
 run_in_container "jq -e '.name == \"reality-only\"' /var/lib/xray-fusion/state.json > /dev/null"
 
+if [[ "${SMOKE_MODE}" == "workspace" ]]; then
+  log "tool update: preserve installed core, config, service and state"
+  CURRENT_SCENARIO="tool layer update"
+  run_in_container "mkdir -p /usr/local/xray-fusion && cp -a /workspace/xray/{bin,commands,lib,modules,services,packaging,uninstall.sh,LICENSE} /usr/local/xray-fusion/ && touch /usr/local/xray-fusion/lib/stale-update-file && sha256sum /usr/local/bin/xray /usr/local/etc/xray/active/*.json /var/lib/xray-fusion/state.json /etc/systemd/system/xray.service > /tmp/before-tool-update.sha256"
+  # Expand backup variables inside the container.
+  # shellcheck disable=SC2016
+  run_in_container 'source /workspace/xray/install.sh; TMP_DIR="$(mktemp -d)"; ln -s /workspace/xray "${TMP_DIR}/xray-fusion"; update_tool_layer > /tmp/scenario-tool-update.log 2>&1; test ! -e /usr/local/xray-fusion/lib/stale-update-file; test -f "${TOOL_UPDATE_BACKUP}/lib/stale-update-file"; sha256sum -c /tmp/before-tool-update.sha256; /usr/local/bin/xrf status > /dev/null'
+fi
+
 log "scenario 2: reinstall refuses to replace existing credentials"
 CURRENT_SCENARIO="scenario 2 reinstall guard"
 run_in_container "sha256sum /usr/local/etc/xray/active/*.json /var/lib/xray-fusion/state.json > /tmp/before-reinstall.sha256"

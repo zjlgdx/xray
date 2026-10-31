@@ -40,6 +40,7 @@ repository. Installer help is available without creating temporary files.
 | `xrf logs` | View logs |
 | `xrf health` | Health check |
 | `xrf upgrade --version vX.Y.Z` | Upgrade the core while preserving configuration |
+| `install.sh --update-tool` | Update the installed tool layer in place (Xray untouched) |
 | `xrf backup` | Create, verify, list, and restore current managed-layout backups |
 | `xrf test-sni` | Diagnose an explicit REALITY target |
 | `xrf uninstall` | Remove installation |
@@ -97,6 +98,24 @@ the configuration hash is unchanged.
 Process/configuration checks do **not** prove REALITY client compatibility. After an
 upgrade, test the actual client through the VPS, including the expected target sites.
 Do not substitute a request through a different proxy or a direct VPS curl for that test.
+
+### Updating the tool layer
+
+`xrf upgrade` replaces the Xray core only. To bring the installed runtime scripts
+(`bin`, `commands`, `lib`, `modules`, `services`, `packaging`) to the current
+source ref, rerun the online installer with `--update-tool`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zjlgdx/xray/main/install.sh |
+  sudo -E bash -s -- --update-tool
+```
+
+It verifies the checkout like a fresh install, backs up the tool directory to
+`<install-dir>.bak-<UTC>`, replaces the managed payload directories, refreshes the
+`/usr/local/bin/xrf` symlink, and runs `xrf status` as a smoke test. On failure it
+restores the backup automatically. The Xray binary, configuration, service and
+`state.json` are not touched and `XRAY_SNI` is not required. Without `--update-tool`
+the installer still refuses an existing tool directory.
 
 ### Logging during configuration changes
 

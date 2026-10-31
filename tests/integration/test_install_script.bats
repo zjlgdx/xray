@@ -74,6 +74,109 @@ EOF
   chmod +x "${project_dir}/bin/xrf"
 }
 
+# =============================================================================
+# Tool Layer Update Tests
+# =============================================================================
+
+make_tool_update_fixtures() {
+  local root="$1" status_rc="${2:-0}"
+  local payload="${root}/download/xray-fusion"
+  local live="${root}/tool"
+  local d
+
+  mkdir -p "${payload}"/{bin,commands,lib,modules,services,packaging}
+  cat > "${payload}/bin/xrf" << EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == "status" ]]; then exit ${status_rc}; fi
+exit 0
+EOF
+  chmod +x "${payload}/bin/xrf"
+  for d in commands lib modules services packaging; do
+    printf 'new-%s\n' "${d}" > "${payload}/${d}/marker"
+  done
+  printf 'license\n' > "${payload}/LICENSE"
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${payload}/uninstall.sh"
+
+  mkdir -p "${live}"/{bin,commands,lib,modules,services,packaging}
+  printf '#!/usr/bin/env bash\nexit 0\n' > "${live}/bin/xrf"
+  chmod +x "${live}/bin/xrf"
+  printf 'stale\n' > "${live}/lib/stale-only-upstream-file.sh"
+  printf 'keep\n' > "${live}/local-note.txt"
+}
+
+@test "online wrapper parses --update-tool into tool-only mode" {
+  run bash -c '
+    source "$1/install.sh"
+    args::init
+    args::parse --update-tool --install-dir /tmp/xrf-tool-mode
+    printf "%s|%s\n" "$TOOL_UPDATE" "$INSTALL_DIR"
+  ' _ "${PROJECT_ROOT}"
+  [ "$status" -eq 0 ]
+  [ "$output" = "true|/tmp/xrf-tool-mode" ]
+}
+
+@test "online wrapper tool update requires an existing tool directory" {
+  run bash -c '
+    source "$1/install.sh"
+    INSTALL_DIR="$2/missing-tool"
+    update_tool_layer
+  ' _ "${PROJECT_ROOT}" "${TEST_TMPDIR}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"run without --update-tool for a fresh install"* ]]
+}
+
+@test "online wrapper tool update replaces payload, prunes stale files and keeps unmanaged files" {
+  local root="${TEST_TMPDIR}/tool-update-ok"
+  make_tool_update_fixtures "${root}"
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/download"
+    INSTALL_DIR="$2/tool"
+    SYMLINK_PATH="$2/bin/xrf"
+    mkdir -p "$2/bin"
+    update_tool_layer
+  ' _ "${PROJECT_ROOT}" "${root}"
+  [ "$status" -eq 0 ]
+  [ -f "${root}/tool/lib/marker" ]
+  [ ! -e "${root}/tool/lib/stale-only-upstream-file.sh" ]
+  [ -f "${root}/tool/local-note.txt" ]
+  [ -L "${root}/bin/xrf" ]
+  [ "$(readlink "${root}/bin/xrf")" = "${root}/tool/bin/xrf" ]
+  compgen -G "${root}/tool.bak-*" > /dev/null
+}
+
+@test "online wrapper tool update rolls back when the smoke test fails" {
+  local root="${TEST_TMPDIR}/tool-update-rollback"
+  make_tool_update_fixtures "${root}" 1
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/download"
+    INSTALL_DIR="$2/tool"
+    SYMLINK_PATH="$2/bin/xrf"
+    mkdir -p "$2/bin"
+    update_tool_layer
+  ' _ "${PROJECT_ROOT}" "${root}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"restoring backup"* ]]
+  [ -f "${root}/tool/lib/stale-only-upstream-file.sh" ]
+  [ ! -e "${root}/tool/lib/marker" ]
+  [ -f "${root}/tool/local-note.txt" ]
+  compgen -G "${root}/tool.bak-*" > /dev/null
+}
+
+@test "online wrapper refusal points existing installs at --update-tool" {
+  local root="${TEST_TMPDIR}/tool-refuse"
+  mkdir -p "${root}/tool"
+  run bash -c '
+    source "$1/install.sh"
+    INSTALL_DIR="$2/tool"
+    install_xray_fusion
+  ' _ "${PROJECT_ROOT}" "${root}"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"--update-tool"* ]]
+  [ ! -e "${root}/tool/.install_in_progress" ]
+}
+
 @test "online wrapper rejects retired topology and plugin flags" {
   run bash -c '
     source "$1/install.sh"
@@ -271,3 +374,38 @@ EOF
 #
 # These are verified through manual testing on target systems.
 # The unit tests provide comprehensive coverage of the core logic.
+
+@test "tool update preserves an unrelated command file" {
+  local root="${TEST_TMPDIR}/tool-command-conflict"
+  make_tool_update_fixtures "${root}"
+  printf 'original command\n' > "${root}/command"
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/download"
+    INSTALL_DIR="$2/tool"
+    SYMLINK_PATH="$2/command"
+    update_tool_layer
+  ' _ "${PROJECT_ROOT}" "${root}"
+  [ "$status" -ne 0 ]
+  [ "$(cat "${root}/command")" = 'original command' ]
+  [ -f "${root}/tool/lib/stale-only-upstream-file.sh" ]
+}
+
+@test "tool updates create distinct backups on repeated invocations" {
+  local root="${TEST_TMPDIR}/tool-repeat"
+  make_tool_update_fixtures "${root}"
+  run bash -c '
+    source "$1/install.sh"
+    TMP_DIR="$2/download"
+    INSTALL_DIR="$2/tool"
+    SYMLINK_PATH="$2/xrf"
+    date() { printf "20261031T000000Z\n"; }
+    update_tool_layer
+    first="$TOOL_UPDATE_BACKUP"
+    update_tool_layer
+    test "$first" != "$TOOL_UPDATE_BACKUP"
+    test -f "$first/lib/stale-only-upstream-file.sh"
+    test -f "$TOOL_UPDATE_BACKUP/lib/marker"
+  ' _ "${PROJECT_ROOT}" "${root}"
+  [ "$status" -eq 0 ]
+}
