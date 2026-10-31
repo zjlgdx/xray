@@ -605,3 +605,5 @@ in `services/xray/install_utils.sh`. It selects the newest published, non-draft
 GitHub release by `published_at`, including prereleases. Keep pagination and failure
 tests in `tests/unit/test_install_utils.bats`; do not replace it with GitHub's
 stable-only `/releases/latest` endpoint.
+
+Use `install.sh --update-tool` to refresh an existing tool payload without upgrading the Xray core. Updates require a real tool directory (not a directory symlink), retain a unique sibling backup, and roll back if the updated status command fails. Use `xrf upgrade` for core upgrades.

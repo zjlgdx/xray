@@ -33,6 +33,8 @@ REQUIRE_SIGNED_TAG="false"
 SYMLINK_PATH="/usr/local/bin/xrf"
 INSTALL_DIR_PREEXISTING="false"
 INSTALL_MARKER=""
+TOOL_UPDATE="false"
+TOOL_UPDATE_BACKUP=""
 
 # Logging functions
 log_info() { echo -e "${GREEN}[INFO]${NC} ${*}"; }
@@ -196,6 +198,7 @@ args::init() {
   VERSION="latest"
   DEBUG="false"
   XRF_YES="false"
+  TOOL_UPDATE="false"
   ALLOW_UNSIGNED_TAG="${XRF_ALLOW_UNSIGNED_TAG:-false}"
 }
 
@@ -218,6 +221,10 @@ args::parse() {
       --install-dir)
         INSTALL_DIR="${2:-}"
         shift 2
+        ;;
+      --update-tool)
+        TOOL_UPDATE="true"
+        shift
         ;;
       --debug)
         DEBUG="true"
@@ -259,10 +266,18 @@ Options:
   --version, -v <version>       Xray version (default: newest published release)
   --proxy <url>                 Proxy for repository download
   --install-dir <path>          Tool directory (default: /usr/local/xray-fusion)
+  --update-tool                 Update an existing tool layer only (no Xray changes)
   --allow-unsigned-release      Skip required GPG verification for tagged releases
   --yes, -y                     Auto-confirm fresh installation
   --debug                       Enable debug output
   --help, -h                    Show this help
+
+Notes:
+  --update-tool replaces bin/commands/lib/modules/services/packaging in an
+  existing tool directory after backing it up. It does not touch the Xray
+  binary, configuration, service or state; XRAY_SNI is not required.
+  The backup path is printed on success and used for automatic rollback when
+  the smoke test fails.
 
 Environment:
   XRAY_SNI          Required REALITY server name
@@ -525,9 +540,10 @@ install_xray_fusion() {
   log_info "Installing xray-fusion to ${INSTALL_DIR}..."
 
   # The online wrapper only installs a fresh tool. A repeat invocation must
-  # leave the existing command available for xrf upgrade or recovery.
+  # leave the existing command available: tool-layer refreshes use --update-tool,
+  # Xray core upgrades use xrf upgrade.
   if [[ -e "${INSTALL_DIR}" || -L "${INSTALL_DIR}" ]]; then
-    log_error "Existing xray-fusion tool at ${INSTALL_DIR}; use xrf upgrade or uninstall it first"
+    log_error "Existing xray-fusion tool at ${INSTALL_DIR}; rerun with --update-tool to update the tool layer, run xrf upgrade for the Xray core, or uninstall it first"
     return 1
   fi
   if [[ -e "${SYMLINK_PATH}" || -L "${SYMLINK_PATH}" ]]; then
@@ -557,6 +573,88 @@ install_xray_fusion() {
   fi
 
   log_info "xray-fusion installed successfully"
+}
+
+# Restore the tool layer from the backup taken before an update.
+restore_tool_backup() {
+  local backup="${TOOL_UPDATE_BACKUP:-}"
+  if [[ -z "${backup}" || ! -d "${backup}" ]]; then
+    log_error "No backup available for rollback; restore the tool layer manually"
+    return 1
+  fi
+  if ! rm -rf "${INSTALL_DIR}" || ! cp -a "${backup}" "${INSTALL_DIR}"; then
+    log_error "Automatic rollback failed; restore manually from ${backup}"
+    return 1
+  fi
+  log_warn "Rolled back tool layer to ${backup}"
+  return 0
+}
+
+# Update the tool layer of an existing installation.
+# Leaves the Xray binary, configuration, service and state untouched.
+update_tool_layer() {
+  while [[ "${INSTALL_DIR}" != / && "${INSTALL_DIR}" == */ ]]; do
+    INSTALL_DIR="${INSTALL_DIR%/}"
+  done
+  log_info "Updating xray-fusion tool layer at ${INSTALL_DIR}..."
+
+  if [[ -L "${INSTALL_DIR}" || ! -d "${INSTALL_DIR}" || ! -f "${INSTALL_DIR}/bin/xrf" ]]; then
+    log_error "No existing xray-fusion tool at ${INSTALL_DIR}; run without --update-tool for a fresh install"
+    return 1
+  fi
+
+  if [[ -e "${SYMLINK_PATH}" && ! -L "${SYMLINK_PATH}" ]]; then
+    log_error "Refusing to replace a non-symlink command at ${SYMLINK_PATH}"
+    return 1
+  fi
+
+  local backup
+  backup="$(mktemp -d "${INSTALL_DIR}.bak-$(date -u +%Y%m%dT%H%M%SZ).XXXXXX")" || return 1
+  if ! cp -a "${INSTALL_DIR}/." "${backup}/"; then
+    log_error "Unable to back up the existing tool to ${backup}; aborting without changes"
+    return 1
+  fi
+  TOOL_UPDATE_BACKUP="${backup}"
+  log_info "Backup created: ${backup}"
+
+  # Replace managed payload directories wholesale so files removed upstream do
+  # not linger. Unmanaged files in the tool directory (if any) are preserved.
+  local entry
+  for entry in bin commands lib modules services packaging; do
+    if ! rm -rf "${INSTALL_DIR:?}/${entry}" \
+      || ! cp -r "${TMP_DIR}/xray-fusion/${entry}" "${INSTALL_DIR}/"; then
+      log_error "Failed to update ${entry}; restoring backup"
+      restore_tool_backup
+      return 1
+    fi
+  done
+  for entry in uninstall.sh LICENSE; do
+    if ! cp -f "${TMP_DIR}/xray-fusion/${entry}" "${INSTALL_DIR}/${entry}"; then
+      log_error "Failed to update ${entry}; restoring backup"
+      restore_tool_backup
+      return 1
+    fi
+  done
+
+  # Smoke test: the updated tool must still be able to report status.
+  if ! "${INSTALL_DIR}/bin/xrf" status > /dev/null 2>&1; then
+    log_error "Updated tool failed the status smoke test; restoring backup"
+    restore_tool_backup
+    return 1
+  fi
+
+  local expected_target actual_target
+  expected_target="$(readlink -f "${INSTALL_DIR}/bin/xrf" 2> /dev/null || true)"
+  actual_target="$(readlink -f "${SYMLINK_PATH}" 2> /dev/null || true)"
+  if [[ -z "${expected_target}" || "${actual_target}" != "${expected_target}" ]]; then
+    if ! ln -sf "${INSTALL_DIR}/bin/xrf" "${SYMLINK_PATH}"; then
+      log_error "Failed to refresh global command at ${SYMLINK_PATH}; restoring backup"
+      restore_tool_backup
+      return 1
+    fi
+  fi
+
+  log_info "xray-fusion tool layer updated successfully"
 }
 
 # Cleanup partial installation
@@ -637,6 +735,17 @@ validate_installation() {
   log_debug "Installation validation completed"
 }
 
+# Show tool layer update summary
+show_tool_update_summary() {
+  log_info "Tool Update Summary:"
+  echo "  Install Directory: ${INSTALL_DIR}"
+  echo "  Source ref: ${BRANCH} (${DOWNLOAD_COMMIT:0:7})"
+  echo "  Backup: ${TOOL_UPDATE_BACKUP:-none}"
+  echo "  Xray binary/config/service: untouched"
+  echo "  1. Check status: xrf status"
+  echo "  2. Deep validation: xrf check --deep"
+}
+
 # Show installation summary
 show_summary() {
   log_info "Installation Summary:"
@@ -665,7 +774,11 @@ EOF
 
   parse_args "${@}"
 
-  if [[ -z "${XRAY_SNI:-}" ]]; then
+  if [[ "${TOOL_UPDATE}" == "true" ]]; then
+    if [[ -L "${INSTALL_DIR}" || ! -d "${INSTALL_DIR}" || ! -f "${INSTALL_DIR}/bin/xrf" ]]; then
+      error_exit "No existing xray-fusion tool at ${INSTALL_DIR}; run without --update-tool for a fresh install"
+    fi
+  elif [[ -z "${XRAY_SNI:-}" ]]; then
     error_exit "XRAY_SNI is required for a fresh REALITY install"
   fi
 
@@ -687,8 +800,12 @@ EOF
 
   # === Step 3: Configuration validation ===
   log_step 3 7 "Validating configuration parameters"
-  log_substep "REALITY SNI: ${XRAY_SNI}" "✓"
-  log_substep "Version: ${VERSION}" "✓"
+  if [[ "${TOOL_UPDATE}" == "true" ]]; then
+    log_substep "Mode: tool layer update (Xray untouched)" "✓"
+  else
+    log_substep "REALITY SNI: ${XRAY_SNI}" "✓"
+    log_substep "Version: ${VERSION}" "✓"
+  fi
 
   # === Step 4: System compatibility check ===
   log_step 4 7 "Checking system compatibility"
@@ -724,7 +841,18 @@ EOF
 
   log_substep "Download completed" "✓"
 
-  # === Step 7: Install and configure ===
+  # === Step 7: Install, update the tool layer, or configure Xray ===
+  if [[ "${TOOL_UPDATE}" == "true" ]]; then
+    log_step 7 7 "Updating xray-fusion tool layer"
+    update_tool_layer
+    log_substep "Tool layer updated" "✓"
+    echo ""
+    show_tool_update_summary
+    echo ""
+    log_info "🎉 Tool layer update completed!"
+    return 0
+  fi
+
   log_step 7 7 "Installing and configuring Xray"
   install_xray_fusion
   log_substep "File installation completed" "✓"

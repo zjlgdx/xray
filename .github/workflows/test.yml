@@ -29,13 +29,19 @@ permissions:
   actions: write     # Required for actions/upload-artifact
 
 env:
+  # Runner images are pinned instead of `ubuntu-latest`: the `ubuntu-latest`
+  # label migrates to Ubuntu 26.04 between 2026-10-19 and 2026-11-19 and emits a
+  # notice on every job. Pinning keeps the toolchain (systemd, docker, apt
+  # packages) deterministic for the kcov/apt-based steps below.
+  # See https://github.com/actions/runner-images/issues/14748
+  #
   # Cache apt payloads in workspace to avoid permission issues restoring /var/cache/apt.
   APT_CACHE_DIR: ${{ github.workspace }}/.cache/apt/archives
 
 jobs:
   lint:
     name: Lint (ShellCheck)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -62,7 +68,7 @@ jobs:
 
   format-check:
     name: Format Check (shfmt)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -150,7 +156,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests (Sandbox)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     # IMPROVED: Run on all pushes and PRs (not just PRs)
     # Rationale: 13/21 (62%) tests are runnable, providing valuable feedback
@@ -374,7 +380,7 @@ jobs:
 
   security-scan:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout code
@@ -401,7 +407,7 @@ jobs:
 
   workflow-summary:
     name: Workflow Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     needs: [lint, format-check, unit-tests, integration-tests, coverage, security-scan]
     if: always()  # Run even if some jobs fail

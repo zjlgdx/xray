@@ -90,3 +90,5 @@ lint gate and JSON report remain; neither is a dedicated secret scanner.
   both target/dest fields),
   and malformed JSON is not reported as compatible. Binary log parsing remains
   covered separately by `unit/test_xray_paths.bats`.
+
+The online-wrapper integration suite covers `--update-tool`, payload pruning, preservation of unmanaged files, rollback on status failure, command-path conflicts, and unique backups for repeated updates.
